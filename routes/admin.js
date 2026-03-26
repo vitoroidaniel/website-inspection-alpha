@@ -217,8 +217,6 @@ router.delete('/api/admin/assets/:id', admin, async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // ── Trucks ────────────────────────────────────────────────────────────────────
 
 router.get('/api/admin/trucks', admin, async (req, res) => {
@@ -293,3 +291,5 @@ router.get('/api/admin/assets', admin, async (req, res) => {
     res.json(rows);
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
+
+module.exports = router;
