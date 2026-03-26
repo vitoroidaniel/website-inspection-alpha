@@ -18,6 +18,9 @@ const { auth }     = require('./middleware/auth');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Trust Railway's proxy so secure cookies work over HTTPS ──────────────────
+app.set('trust proxy', 1);
+
 // ── Uploads directory ─────────────────────────────────────────────────────────
 const uploadsDir =
   process.env.UPLOADS_DIR ||
@@ -77,16 +80,11 @@ app.get('/driver/inspect',  auth, (req, res) => req.session.user.role === 'drive
 app.get('/agent/dashboard', auth, (req, res) => req.session.user.role !== 'driver'  ? res.sendFile(path.join(__dirname, 'public', 'agent.html'))  : res.redirect('/driver/inspect'));
 
 // ── API routes ────────────────────────────────────────────────────────────────
-// login/logout/me  →  POST /api/login, POST /api/logout, GET /api/me
-app.use('/api', authRouter);
-
-// webauthn          →  /api/auth/webauthn/*  (frontend expects this prefix)
-app.use('/api/auth', authRouter);
-
-// all other routes
-app.use('/', driverRouter);
-app.use('/', agentRouter);
-app.use('/', adminRouter);
+app.use('/api',      authRouter);   // POST /api/login, /api/logout, GET /api/me
+app.use('/api/auth', authRouter);   // POST /api/auth/webauthn/*
+app.use('/',         driverRouter);
+app.use('/',         agentRouter);
+app.use('/',         adminRouter);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () =>
