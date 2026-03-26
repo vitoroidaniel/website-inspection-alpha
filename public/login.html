@@ -5,187 +5,98 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Kurtex — Sign In</title>
 <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
 <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <meta name="theme-color" content="#1e4da1">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/styles.css">
 <style>
-  /* ── Login page overrides ── */
-  body { background: #0d1b3e; }
-  body::before { display: none; }
-
-  /* Fullscreen truck background */
-  .login-bg {
-    position: fixed; inset: 0; z-index: 0;
-    background:
-      linear-gradient(to bottom, rgba(5,15,35,0.55) 0%, rgba(5,15,35,0.75) 100%),
-      url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1600&q=80&auto=format&fit=crop') center center / cover no-repeat;
-  }
-
-  /* Page layout */
-  body { display: flex; flex-direction: column; min-height: 100vh; }
-  .hdr { display: none; }
-  footer { position: relative; z-index: 1; background: transparent; border: none; }
-  footer span { color: rgba(255,255,255,0.35); }
-
-  main {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 24px 16px 12px;
-    position: relative; z-index: 1;
-  }
-
-  /* Logo above card */
-  .login-logo {
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-    margin-bottom: 20px;
-  }
-  .login-logo img {
-    width: 64px; height: 64px; border-radius: 18px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  }
-  .login-logo-name {
-    font-size: 28px; font-weight: 900; color: #fff;
-    letter-spacing: -0.8px; text-shadow: 0 2px 12px rgba(0,0,0,0.4);
-  }
-  .login-logo-sub {
-    font-size: 12px; color: rgba(255,255,255,0.5);
-    font-weight: 500; margin-top: -6px;
-  }
-
-  /* Card glassmorphism on dark bg */
-  .card {
-    background: rgba(255,255,255,0.97);
-    box-shadow: 0 24px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.1);
-    max-width: 400px;
-  }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: 'Nunito', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0d1f44; -webkit-font-smoothing: antialiased; }
+.login-bg { position: fixed; inset: 0; z-index: 0; background: linear-gradient(160deg, #0a1628 0%, #0d2347 40%, #0a1e3d 70%, #071428 100%); }
+.login-bg::after { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 60% 40% at 20% 80%, rgba(30,77,161,0.35) 0%, transparent 60%), radial-gradient(ellipse 40% 30% at 80% 20%, rgba(124,74,30,0.2) 0%, transparent 50%); }
+.login-wrap { position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 20px 16px; display: flex; flex-direction: column; align-items: center; }
+.card { width: 100%; background: #fff; border-radius: 28px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06); }
+.role-switch { display: flex; background: #f0f4ff; margin: 20px 20px 0; border-radius: 14px; padding: 4px; gap: 4px; }
+.role-btn { flex: 1; padding: 10px 16px; background: none; border: none; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; color: #7a8ab0; cursor: pointer; border-radius: 11px; transition: all 0.18s; }
+.role-btn.active { background: #fff; color: #1e4da1; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.role-btn:not(.active):hover { color: #1e4da1; }
+.card-body { padding: 24px 24px 28px; }
+.panel { display: none; }
+.panel.active { display: block; }
+.login-title { font-size: 26px; font-weight: 900; color: #0f1624; letter-spacing: -0.6px; margin-bottom: 6px; }
+.login-sub { font-size: 14px; color: #7a8ab0; font-weight: 500; margin-bottom: 24px; line-height: 1.5; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; font-weight: 700; color: #2d3748; margin-bottom: 7px; }
+.field input { display: block; width: 100%; background: #f7f8fc; border: 2px solid #e8ecf8; border-radius: 12px; color: #0f1624; padding: 13px 16px; font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600; outline: none; transition: all 0.18s; }
+.field input:focus { border-color: #1e4da1; background: #fff; box-shadow: 0 0 0 4px rgba(30,77,161,0.08); }
+.field input::placeholder { color: #b0bcd8; font-weight: 500; }
+.keep-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; cursor: pointer; user-select: none; }
+.keep-box { width: 20px; height: 20px; border: 2px solid #d0d8f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.18s; background: #fff; }
+.keep-row input[type=checkbox] { display: none; }
+.keep-row input:checked ~ .keep-box { background: #1e4da1; border-color: #1e4da1; }
+.keep-row input:checked ~ .keep-box svg { display: block; }
+.keep-box svg { display: none; width: 11px; height: 11px; }
+.keep-label { font-size: 13px; font-weight: 600; color: #7a8ab0; }
+.btn-login { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #1e4da1; color: #fff; border: none; padding: 16px 24px; border-radius: 14px; font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 20px rgba(30,77,161,0.35); transition: all 0.18s; }
+.btn-login:hover { background: #163d85; transform: translateY(-1px); }
+.btn-login:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
+.divider-line { flex: 1; height: 1.5px; background: #eef0f8; }
+.divider span { font-size: 11px; font-weight: 700; color: #b0bcd8; text-transform: uppercase; letter-spacing: 0.8px; }
+.btn-bio { display: flex; align-items: center; gap: 14px; width: 100%; background: #f7f8fc; border: 2px solid #e8ecf8; border-radius: 14px; padding: 14px 16px; font-family: 'Nunito', sans-serif; cursor: pointer; transition: all 0.18s; }
+.btn-bio:hover { border-color: #1e4da1; background: #f0f4ff; }
+.bio-icon-wrap { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #1e4da1, #0d2a5e); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bio-icon-wrap svg { width: 20px; height: 20px; stroke: #fff; }
+.bio-text { display: flex; flex-direction: column; gap: 1px; }
+.bio-text span:first-child { font-size: 14px; font-weight: 800; color: #0f1624; }
+.bio-text span:last-child { font-size: 12px; font-weight: 500; color: #7a8ab0; }
+.bio-arrow { margin-left: auto; color: #b0bcd8; }
+.bio-arrow svg { width: 16px; height: 16px; }
+.err-box { display: none; margin-top: 14px; background: #fff1f0; border: 1.5px solid #ffd0cc; color: #c0392b; font-size: 13px; font-weight: 600; padding: 12px 16px; border-radius: 12px; line-height: 1.5; }
 </style>
 </head>
 <body>
-
-<!-- Fullscreen truck background -->
 <div class="login-bg"></div>
-
-<header class="hdr"></header>
-
-<main>
-  <!-- Logo centered above card -->
-  <div class="login-logo">
-    <img src="img/logo-inspection.png" alt="Kurtex logo">
-    <div class="login-logo-name">Kurtex</div>
-    <div class="login-logo-sub">by Rekka Software</div>
-  </div>
-
+<div class="login-wrap">
   <div class="card">
-    <!-- Welcome Banner -->
-    <div class="login-welcome">
-      <div class="login-welcome-title">Welcome back 👋</div>
-      <div class="login-welcome-sub">Kurtex Fleet Inspection System</div>
+    <div class="role-switch">
+      <button class="role-btn active" id="tabDriver" onclick="setTab('driver')">Driver</button>
+      <button class="role-btn" id="tabAgent" onclick="setTab('agent')">Dispatcher</button>
     </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" id="tabDriver" onclick="setTab('driver')">
-        <span class="material-icons-round" style="font-size:16px">local_shipping</span>Driver
-      </button>
-      <button class="tab-btn" id="tabAgent" onclick="setTab('agent')">
-        <span class="material-icons-round" style="font-size:16px">assignment_ind</span>Dispatcher
-      </button>
-    </div>
-
     <div class="card-body">
-
-      <!-- DRIVER PANEL -->
       <div class="panel active" id="panelDriver">
-        <div class="panel-title">Driver Login</div>
-        <div class="panel-sub">Sign in to start your vehicle inspection.</div>
-
-        <div class="field">
-          <label>Telegram Username</label>
-          <input type="text" id="dUser" autocapitalize="none" autocomplete="username" placeholder="@username or username">
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="dPass" autocomplete="current-password" placeholder="Your password">
-        </div>
-        <label class="keep-row">
-          <input type="checkbox" id="dKeep">
-          <div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <span class="keep-label">Keep me signed in for 30 days</span>
-        </label>
-
-        <button class="btn-primary" id="dLoginBtn" onclick="loginDriver()">
-          <span class="material-icons-round" style="font-size:20px">rocket_launch</span>
-          <span id="dLoginTxt">Start Inspection</span>
-        </button>
-
+        <div class="login-title">Sign in</div>
+        <div class="login-sub">Enter your credentials to start your inspection.</div>
+        <div class="field"><label>Telegram Username</label><input type="text" id="dUser" autocapitalize="none" autocomplete="username" placeholder="@username"></div>
+        <div class="field"><label>Password</label><input type="password" id="dPass" autocomplete="current-password" placeholder="••••••••"></div>
+        <label class="keep-row"><input type="checkbox" id="dKeep"><div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="keep-label">Stay signed in for 30 days</span></label>
+        <button class="btn-login" id="dLoginBtn" onclick="loginDriver()"><span id="dLoginTxt">Start Inspection</span></button>
         <div class="divider"><div class="divider-line"></div><span>or</span><div class="divider-line"></div></div>
-
         <button class="btn-bio" id="dBioBtn" onclick="biometricLogin('driver')" style="display:none">
-          <div class="faceid-icon">
-            <span class="material-icons-round bio-icon">face</span>
-          </div>
-          <div class="bio-label">
-            <span id="dBioLabel">Face ID</span>
-            <span>Quick biometric sign in</span>
-          </div>
-          <span class="material-icons-round" style="font-size:18px;color:var(--muted);margin-left:auto">chevron_right</span>
+          <div class="bio-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+          <div class="bio-text"><span id="dBioLabel">Face ID / Touch ID</span><span>Quick biometric sign in</span></div>
+          <div class="bio-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
         </button>
-
         <div class="err-box" id="dErr"></div>
       </div>
-
-      <!-- AGENT PANEL -->
       <div class="panel" id="panelAgent">
-        <div class="panel-title">Welcome back</div>
-        <div class="panel-sub">Sign in with your dispatcher or admin credentials.</div>
-
-        <div class="field">
-          <label>Telegram Username</label>
-          <input type="text" id="aUser" autocapitalize="none" autocomplete="username" placeholder="@username or username">
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="aPass" autocomplete="current-password" placeholder="Your password">
-        </div>
-        <label class="keep-row">
-          <input type="checkbox" id="aKeep">
-          <div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <span class="keep-label">Keep me signed in for 30 days</span>
-        </label>
-
-        <button class="btn-primary" id="aLoginBtn" onclick="loginAgent()">
-          <span class="material-icons-round" style="font-size:20px">login</span>
-          <span id="aLoginTxt">Sign In</span>
-        </button>
-
+        <div class="login-title">Sign in</div>
+        <div class="login-sub">Dispatcher or admin access.</div>
+        <div class="field"><label>Telegram Username</label><input type="text" id="aUser" autocapitalize="none" autocomplete="username" placeholder="@username"></div>
+        <div class="field"><label>Password</label><input type="password" id="aPass" autocomplete="current-password" placeholder="••••••••"></div>
+        <label class="keep-row"><input type="checkbox" id="aKeep"><div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="keep-label">Stay signed in for 30 days</span></label>
+        <button class="btn-login" id="aLoginBtn" onclick="loginAgent()"><span id="aLoginTxt">Sign In</span></button>
         <div class="divider"><div class="divider-line"></div><span>or</span><div class="divider-line"></div></div>
-
         <button class="btn-bio" id="aBioBtn" onclick="biometricLogin('agent')" style="display:none">
-          <div class="faceid-icon">
-            <span class="material-icons-round bio-icon">face</span>
-          </div>
-          <div class="bio-label">
-            <span id="aBioLabel">Face ID</span>
-            <span>Quick biometric sign in</span>
-          </div>
-          <span class="material-icons-round" style="font-size:18px;color:var(--muted);margin-left:auto">chevron_right</span>
+          <div class="bio-icon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+          <div class="bio-text"><span id="aBioLabel">Face ID / Touch ID</span><span>Quick biometric sign in</span></div>
+          <div class="bio-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
         </button>
-
         <div class="err-box" id="aErr"></div>
-        <!-- hint-box removed for production -->
       </div>
-
     </div>
   </div>
-</main>
-
-<footer>
-  <span><span class="status-dot"></span>System online</span>
-  <span>© 2026 Kurtex by Rekka Software</span>
-</footer>
-
+</div>
 <script src="/js/login.js"></script>
-<script src="/js/icons.js"></script>
 </body>
 </html>
