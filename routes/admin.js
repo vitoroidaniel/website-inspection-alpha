@@ -285,3 +285,11 @@ router.post('/api/admin/trucks/:id/assign', admin, async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
+
+// GET all assets including inactive (for admin panel)
+router.get('/api/admin/assets', admin, async (req, res) => {
+  try {
+    const rows = await db.prepare('SELECT * FROM assets ORDER BY active DESC, asset_number').all();
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
