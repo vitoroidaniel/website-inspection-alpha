@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kurtex — Dashboard</title>
-<link rel="icon" type="image/x-icon" href="/img/favicon.ico">
-<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon.png">
+<link rel="apple-touch-icon" href="/img/logo.png">
 <meta name="theme-color" content="#1e4da1">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -299,8 +299,8 @@ body {
 
 /* Left: section selector */
 .admin-nav {
-  width: 200px; background: var(--surface); border-right: 1.5px solid var(--border);
-  padding: 16px 10px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;
+  width: 175px; background: var(--surface); border-right: 1.5px solid var(--border);
+  padding: 16px 8px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;
 }
 .admin-nav-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 8px; margin-bottom: 8px; }
 .adm-btn {
@@ -315,7 +315,7 @@ body {
 .adm-sep { height: 1px; background: var(--border); margin: 6px 0; }
 
 /* Center: content */
-.admin-content { flex: 1; overflow-y: auto; padding: 24px 28px; max-width: 700px; }
+.admin-content { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: none; }
 .admin-section { display: none; }
 .admin-section.active { display: block; }
 .admin-section-title { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.4px; margin-bottom: 4px; }
@@ -382,7 +382,7 @@ textarea.finput { resize: vertical; min-height: 80px; }
 .steps-type-btn:hover { background: var(--surface); color: var(--text); }
 .steps-type-btn.active { background: var(--brand); color: #fff; }
 .steps-type-btn .step-count { font-size: 12px; font-weight: 700; opacity: 0.7; }
-.steps-list-col { flex: 1; overflow-y: auto; max-height: 500px; background: var(--surface); }
+.steps-list-col { flex: 1; overflow-y: auto; max-height: 620px; background: var(--surface); }
 .step-row {
   display: flex; align-items: center; gap: 12px; padding: 13px 16px;
   border-bottom: 1px solid var(--border); transition: background 0.12s;
@@ -483,7 +483,7 @@ textarea.finput { resize: vertical; min-height: 80px; }
 }
 .mobile-nav-btn svg { width: 22px; height: 22px; }
 .mobile-nav-btn.active { color: var(--brand); }
-.mobile-nav { display: none; flex-direction: row; }
+.mobile-nav { display: none !important; flex-direction: row; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
@@ -491,7 +491,7 @@ textarea.finput { resize: vertical; min-height: 80px; }
   .agent-name { display: none; }
   .app { flex-direction: column; }
   .sidebar { display: none; }
-  .mobile-nav { display: flex !important; }
+  .mobile-nav { display: flex !important; flex-direction: row; }
   .panel-area { height: calc(100vh - 60px - 58px); }
   .stats-bar { grid-template-columns: repeat(3,1fr); gap: 7px; padding: 11px 13px; }
   .drivers-col { width: 100%; border-right: none; border-bottom: 1.5px solid var(--border); }
@@ -514,7 +514,7 @@ textarea.finput { resize: vertical; min-height: 80px; }
 
 <header class="hdr">
   <div class="logo-wrap">
-    <img src="img/logo-inspection.png" class="logo-img" alt="Kurtex">
+    <img src="/img/logo.png" class="logo-img" alt="Kurtex">
     <div class="logo-text">Kurtex</div>
   </div>
   <div class="role-chip" id="roleBadge">Dispatcher</div>
