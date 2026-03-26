@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Kurtex — Sign In</title>
+<link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta name="theme-color" content="#1e4da1">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="hdr">
+  <div class="logo-wrap">
+    <img src="img/logo-inspection.png" class="logo-img" alt="Kurtex logo">
+    <div class="logo-text">Kurtex</div>
+  </div>
+  <span class="dev-credit">by Rekka Software</span>
+</header>
+
+<main>
+  <div class="card">
+
+    <!-- Welcome Banner -->
+    <div class="login-welcome">
+      <div class="login-welcome-title">Welcome back 👋</div>
+      <div class="login-welcome-sub">Kurtex Fleet Inspection System</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabDriver" onclick="setTab('driver')">
+        <span class="material-icons-round" style="font-size:16px">local_shipping</span>Driver
+      </button>
+      <button class="tab-btn" id="tabAgent" onclick="setTab('agent')">
+        <span class="material-icons-round" style="font-size:16px">assignment_ind</span>Dispatcher
+      </button>
+    </div>
+
+    <div class="card-body">
+
+      <!-- DRIVER PANEL -->
+      <div class="panel active" id="panelDriver">
+        <div class="panel-title">Driver Login</div>
+        <div class="panel-sub">Sign in to start your vehicle inspection.</div>
+
+        <div class="field">
+          <label>Telegram Username</label>
+          <input type="text" id="dUser" autocapitalize="none" autocomplete="username" placeholder="@username or username">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="dPass" autocomplete="current-password" placeholder="Your password">
+        </div>
+        <label class="keep-row">
+          <input type="checkbox" id="dKeep">
+          <div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <span class="keep-label">Keep me signed in for 30 days</span>
+        </label>
+
+        <button class="btn-primary" id="dLoginBtn" onclick="loginDriver()">
+          <span class="material-icons-round" style="font-size:20px">rocket_launch</span>
+          <span id="dLoginTxt">Start Inspection</span>
+        </button>
+
+        <div class="divider"><div class="divider-line"></div><span>or</span><div class="divider-line"></div></div>
+
+        <!-- Face ID button — bank-app style -->
+        <button class="btn-bio" id="dBioBtn" onclick="biometricLogin('driver')" style="display:none">
+          <div class="faceid-icon">
+            <span class="material-icons-round bio-icon">face</span>
+          </div>
+          <div class="bio-label">
+            <span id="dBioLabel">Face ID</span>
+            <span>Quick biometric sign in</span>
+          </div>
+          <span class="material-icons-round" style="font-size:18px;color:var(--muted);margin-left:auto">chevron_right</span>
+        </button>
+
+        <div class="err-box" id="dErr"></div>
+      </div>
+
+      <!-- AGENT PANEL -->
+      <div class="panel" id="panelAgent">
+        <div class="panel-title">Welcome back</div>
+        <div class="panel-sub">Sign in with your dispatcher or admin credentials.</div>
+
+        <div class="field">
+          <label>Telegram Username</label>
+          <input type="text" id="aUser" autocapitalize="none" autocomplete="username" placeholder="@username or username">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="aPass" autocomplete="current-password" placeholder="Your password">
+        </div>
+        <label class="keep-row">
+          <input type="checkbox" id="aKeep">
+          <div class="keep-box"><svg viewBox="0 0 14 14" fill="none"><polyline points="2,7 5.5,10.5 12,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <span class="keep-label">Keep me signed in for 30 days</span>
+        </label>
+
+        <button class="btn-primary" id="aLoginBtn" onclick="loginAgent()">
+          <span class="material-icons-round" style="font-size:20px">login</span>
+          <span id="aLoginTxt">Sign In</span>
+        </button>
+
+        <div class="divider"><div class="divider-line"></div><span>or</span><div class="divider-line"></div></div>
+
+        <button class="btn-bio" id="aBioBtn" onclick="biometricLogin('agent')" style="display:none">
+          <div class="faceid-icon">
+            <span class="material-icons-round bio-icon">face</span>
+          </div>
+          <div class="bio-label">
+            <span id="aBioLabel">Face ID</span>
+            <span>Quick biometric sign in</span>
+          </div>
+          <span class="material-icons-round" style="font-size:18px;color:var(--muted);margin-left:auto">chevron_right</span>
+        </button>
+
+        <div class="err-box" id="aErr"></div>
+        <div class="hint-box">
+          <p>Dispatcher: <strong>dispatch / dispatch123</strong><br>Admin: <strong>admin / admin123</strong></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span><span class="status-dot"></span>System online</span>
+  <span>© 2026 Kurtex by Rekka Software</span>
+</footer>
+
+<script src="/js/login.js"></script>
+</body>
+</html>

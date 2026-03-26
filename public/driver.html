@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Kurtex — Inspection</title>
+<link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta name="theme-color" content="#1e4da1">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="hdr-app">
+  <div class="logo-wrap">
+    <img src="img/logo-inspection.png" class="logo-img logo-img-sm" alt="Kurtex logo">
+    <div class="logo-text">Kurtex</div>
+  </div>
+  <div class="hdr-r">
+    <button class="btn-settings" id="settingsBtn" onclick="openSettings()">
+      <span class="material-icons-round" style="font-size:18px">settings</span>
+      <span class="btn-settings-label">Settings</span>
+    </button>
+    <div class="d-pill"><strong id="dName">Driver</strong><span id="dTruck">—</span></div>
+    <button class="btn-exit" onclick="logout()">
+      <span class="material-icons-round" style="font-size:18px;vertical-align:-4px">logout</span>
+    </button>
+  </div>
+</header>
+<input type="file" id="camInput" accept="image/*" capture="environment">
+
+<!-- RESUME BANNER -->
+<div class="resume-banner" id="resumeBanner" style="display:none">
+  <span class="material-icons-round" style="font-size:18px;color:#b45309">restore</span>
+  <span id="resumeLabel">Resume in-progress inspection</span>
+  <div style="display:flex;gap:8px;margin-left:auto">
+    <button class="resume-btn" onclick="resumeInspection()">Resume</button>
+    <button class="resume-dismiss" onclick="dismissResume()">Dismiss</button>
+  </div>
+</div>
+
+<!-- HOME -->
+<div class="screen active" id="sHome">
+  <div class="type-bar">
+    <div class="type-bar-label">Select Inspection Type</div>
+    <div class="type-btns">
+      <button class="type-btn active" id="typeBtnPickup" onclick="setType('pickup')">
+        <span class="material-icons-round" style="font-size:26px">local_shipping</span>PickUp
+      </button>
+      <button class="type-btn" id="typeBtnDrop" onclick="setType('drop')">
+        <span class="material-icons-round" style="font-size:26px">place</span>Drop
+      </button>
+      <button class="type-btn" id="typeBtnGeneral" onclick="setType('general')">
+        <span class="material-icons-round" style="font-size:26px">checklist</span>General
+      </button>
+    </div>
+  </div>
+  <div class="home-scroll">
+    <!-- Trailer Selector -->
+    <div class="trailer-selector">
+      <div class="trailer-selector-lbl">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px;color:var(--brand)">directions_car</span>
+        Trailer / Asset
+      </div>
+      <div class="trailer-selector-row">
+        <span id="selectedAsset" style="color:var(--muted);font-size:14px;font-weight:600">No trailer selected (optional)</span>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn-select-trailer" onclick="openTrailerModal()">
+            <span class="material-icons-round" style="font-size:14px;vertical-align:-2px">search</span> Select
+          </button>
+          <button class="btn-clear-trailer" id="clearAssetBtn" onclick="clearTrailer()" style="display:none">
+            <span class="material-icons-round" style="font-size:14px;vertical-align:-2px">close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="tile-lbl">Driver</div><div class="tile-val" id="iName">—</div></div>
+      <div class="tile"><div class="tile-lbl">Truck #</div><div class="tile-val brand" id="iNum">—</div></div>
+      <div class="tile"><div class="tile-lbl">Model</div><div class="tile-val" id="iTruck">—</div></div>
+      <div class="tile"><div class="tile-lbl">Steps</div><div class="tile-val brand" id="iSteps">—</div></div>
+    </div>
+    <div class="gps-row"><div class="gps-dot" id="gpsDot"></div><span id="gpsText">Requesting location…</span></div>
+    <button class="btn-start" onclick="startInspection()">
+      Begin Inspection
+      <span class="badge" id="startBadge">21 steps</span>
+    </button>
+    <div class="sec-hd">Recent Inspections</div>
+    <div id="recentList"><p style="font-size:16px;color:var(--dim);font-weight:600">No inspections yet.</p></div>
+  </div>
+</div>
+
+<!-- INSPECT -->
+<div class="screen" id="sInspect">
+  <div class="prog-hd">
+    <div class="prog-top"><span class="prog-lbl" id="sLabel">Step 1</span><span class="prog-ctr" id="sCtr">1 / 21</span></div>
+    <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+    <div class="step-dots" id="stepDots"></div>
+  </div>
+  <div class="inspect-body">
+    <div>
+      <div class="step-num" id="sEye">STEP 1 OF 21</div>
+      <div class="step-title" id="sTitle">Front Exterior</div>
+      <div class="step-desc" id="sDesc" style="margin-top:12px"></div>
+    </div>
+    <div class="photo-zone" id="photoZone" onclick="triggerCam()">
+      <div class="ph-placeholder" id="phPlaceholder">
+        <div class="ph-icon"><span class="material-icons-round" style="font-size:40px;color:var(--muted)">photo_camera</span></div>
+        <div class="ph-hint">Tap to open camera</div>
+        <div class="ph-sub">Live photo required</div>
+      </div>
+      <img class="ph-preview" id="phPreview" src="" alt="">
+      <div class="upload-overlay" id="uploadOverlay"><div class="spinner"></div><span>Uploading…</span></div>
+      <div class="ph-badge" id="phBadge"><span class="material-icons-round" style="font-size:14px">check</span> Captured</div>
+    </div>
+    <div class="ph-err" id="phErr"></div>
+    <div class="photo-btns">
+      <button class="btn-retake" id="retakeBtn" onclick="retake(event)">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">refresh</span> Retake
+      </button>
+      <button class="btn-camera" id="camBtn" onclick="triggerCam()">
+        <span class="material-icons-round" style="font-size:20px">photo_camera</span>Open Camera
+      </button>
+    </div>
+  </div>
+  <div class="inspect-footer">
+    <button class="btn-back-step" onclick="prevStep()">
+      <span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_left</span> Back
+    </button>
+    <button class="btn-next" id="btnNext" onclick="nextStep()" disabled>Continue
+      <span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_right</span>
+    </button>
+  </div>
+</div>
+
+<!-- REVIEW -->
+<div class="screen" id="sReview">
+  <div class="review-hd">
+    <div class="review-tag"><span class="material-icons-round" style="font-size:14px;vertical-align:-2px">check_circle</span> All steps complete!</div>
+    <div class="review-title">Review &amp; Submit</div>
+    <div class="review-type" id="revType">PickUp Trailer Inspection</div>
+  </div>
+  <div class="review-body">
+    <div style="margin-bottom:22px">
+      <div class="rev-sec-hd">Photos — <span id="revCount">0</span> captured</div>
+      <div class="review-grid" id="revGrid"></div>
+    </div>
+    <div style="margin-bottom:22px">
+      <div class="rev-sec-hd">Details</div>
+      <div class="detail-list">
+        <div class="drow"><span class="k">Driver</span><span class="v" id="revDriver">—</span></div>
+        <div class="drow"><span class="k">Truck</span><span class="v" id="revTruck">—</span></div>
+        <div class="drow"><span class="k">Truck No.</span><span class="v" id="revNum">—</span></div>
+        <div class="drow"><span class="k">Trailer / Asset</span><span class="v" id="revTrailer">—</span></div>
+        <div class="drow"><span class="k">Type</span><span class="v" id="revTypeRow">—</span></div>
+        <div class="drow"><span class="k">Date &amp; Time</span><span class="v" id="revTime">—</span></div>
+        <div class="drow"><span class="k">GPS</span><span class="v" id="revLoc">—</span></div>
+      </div>
+    </div>
+    <div style="margin-bottom:22px">
+      <div class="rev-sec-hd">Notes (optional)</div>
+      <textarea class="notes-ta" id="notesInput" placeholder="Any observations or remarks…"></textarea>
+    </div>
+    <button class="btn-submit" id="btnSubmit" onclick="submitInspection()">
+      <span id="submitTxt">Submit Inspection</span>
+      <span class="material-icons-round" style="font-size:22px">send</span>
+    </button>
+    <button class="btn-cancel-rev" onclick="goBackToPhotos()">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">chevron_left</span> Back to Photos
+    </button>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<div class="screen" id="sSuccess">
+  <div class="success-wrap">
+    <div class="success-ring"><span class="material-icons-round" style="font-size:48px;color:#22c55e">check_circle</span></div>
+    <div class="success-title">Submitted!</div>
+    <p class="success-sub">Your inspection was sent to the dispatcher.<br>All photos and GPS data recorded.</p>
+    <button class="btn-new-insp" onclick="newInspection()">
+      New Inspection <span class="material-icons-round" style="font-size:20px;vertical-align:-4px">arrow_forward</span>
+    </button>
+  </div>
+</div>
+
+<!-- TRAILER SELECT MODAL -->
+<div class="modal-bg" id="trailerModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Select Trailer / Asset</div>
+      <button class="modal-close" onclick="closeTrailerModal()">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+      </button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div id="trailerList" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Settings</div>
+      <button class="modal-close" onclick="closeSettings()">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">
+            <span class="material-icons-round" style="font-size:18px;vertical-align:-4px;margin-right:6px;color:var(--brand)">fingerprint</span>
+            Face ID / Fingerprint
+          </div>
+          <div class="setting-desc">Use biometric authentication to log in quickly</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+          <span class="setting-status not-setup" id="bioSetupBadge">Not Setup</span>
+          <button class="btn-setting" id="setupBioBtn" onclick="setupBiometric()">Setup</button>
+          <button class="btn-setting danger" id="removeBioBtn" onclick="removeBiometric()" style="display:none">Remove</button>
+        </div>
+      </div>
+      <div class="alert-box" id="settingsAlert"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/driver.js"></script>
+</body>
+</html>

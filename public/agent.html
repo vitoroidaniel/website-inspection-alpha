@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kurtex — Dashboard</title>
+<link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta name="theme-color" content="#1e4da1">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header class="hdr-app">
+  <div class="logo-wrap">
+    <img src="img/logo-inspection.png" class="logo-img logo-img-sm" alt="Kurtex logo">
+    <div class="logo-text">Kurtex</div>
+  </div>
+  <div class="role-chip" id="roleBadge">Dispatcher</div>
+  <div class="hdr-r">
+    <span class="agent-name" id="agentName">Loading…</span>
+    <button class="btn-signout" onclick="logout()">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">logout</span> Sign Out
+    </button>
+  </div>
+</header>
+
+<div class="app">
+  <nav class="sidebar">
+    <button class="nav-btn active" id="navOverview" onclick="showTab('Overview')">
+      <span class="material-icons-round">dashboard</span>Fleet
+    </button>
+    <div class="nav-sep"></div>
+    <button class="nav-btn" id="navFeed" onclick="showTab('Feed')">
+      <span class="material-icons-round">history</span>History
+    </button>
+    <div class="nav-sep" id="adminSep" style="display:none"></div>
+    <button class="nav-btn" id="navAdmin" onclick="showTab('Admin')" style="display:none">
+      <span class="material-icons-round">manage_accounts</span>Admin
+    </button>
+  </nav>
+
+  <div class="panel-area">
+
+    <!-- OVERVIEW -->
+    <div class="tab active" id="tabOverview">
+      <div class="stats-bar">
+        <div class="stat-box"><div class="stat-num" id="sD">—</div><div class="stat-lbl">Active Drivers</div></div>
+        <div class="stat-box"><div class="stat-num" id="sDi">—</div><div class="stat-lbl">Dispatchers</div></div>
+        <div class="stat-box"><div class="stat-num" id="sT">—</div><div class="stat-lbl">Inspections</div></div>
+        <div class="stat-box"><div class="stat-num brand" id="sTd">—</div><div class="stat-lbl">Today</div></div>
+        <div class="stat-box"><div class="stat-num" id="sP">—</div><div class="stat-lbl">Photos</div></div>
+      </div>
+      <div class="ov-wrap">
+        <div class="drivers-col">
+          <div class="col-hd"><div class="col-hd-lbl">Fleet</div><div class="col-hd-title"><em id="dCount">0</em> Drivers</div></div>
+          <input class="search-inp" type="text" placeholder="Search…" id="searchBox" oninput="filterDrivers()">
+          <div class="drivers-list" id="driversList"><div style="padding:16px;font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+        </div>
+        <div class="detail-col">
+          <div class="detail-empty" id="detailEmpty">
+            <div class="empty-icon"><span class="material-icons-round" style="font-size:40px;color:var(--muted)">assignment</span></div>
+            <div class="empty-txt">Select a driver to view inspections</div>
+          </div>
+          <div class="detail-content" id="detailContent">
+            <div class="detail-hd">
+              <button class="mobile-back-btn" id="backToDriversBtn" onclick="backToDrivers()">
+                <span class="material-icons-round" style="font-size:18px">chevron_left</span>All Drivers
+              </button>
+              <div class="detail-name" id="detailName">—</div>
+              <div class="detail-sub" id="detailSub"></div>
+            </div>
+            <div class="insp-list" id="inspList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="tab" id="tabFeed">
+      <div class="feed-outer">
+        <div class="history-main">
+          <div class="feed-toolbar">
+            <div class="page-title">Inspection History</div>
+            <button class="filter-chip active" id="fAll" onclick="setFilter('all')">All</button>
+            <button class="filter-chip" id="fPickup" onclick="setFilter('pickup')">PickUp</button>
+            <button class="filter-chip" id="fDrop" onclick="setFilter('drop')">Drop</button>
+            <button class="filter-chip" id="fGeneral" onclick="setFilter('general')">General</button>
+          </div>
+          <div class="history-scroll">
+            <table class="htbl">
+              <thead><tr><th>ID</th><th>Status</th><th>Date</th><th>Asset</th><th>Driver</th><th>Type</th><th>Actions</th></tr></thead>
+              <tbody id="feedBody"><tr><td colspan="7" style="padding:20px;font-size:15px;color:var(--dim);font-weight:600">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="hist-panel closed" id="histPanel">
+          <div class="hp-hd">
+            <div class="hp-title" id="hpTitle">Inspection</div>
+            <button class="hp-close" onclick="closeHistPanel()">
+              <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+            </button>
+          </div>
+          <div class="hp-body" id="hpBody"></div>
+        </div>
+        <div class="asset-panel closed" id="assetPanel">
+          <div class="ap-hd">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              <span class="material-icons-round" style="font-size:22px;color:var(--brand);flex-shrink:0">directions_car</span>
+              <div style="min-width:0">
+                <div class="ap-title" id="apTitle">Asset</div>
+                <div class="ap-sub" id="apSub"></div>
+              </div>
+            </div>
+            <button class="hp-close" onclick="closeAssetPanel()">
+              <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+            </button>
+          </div>
+          <div class="ap-body" id="apBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN -->
+    <div class="tab" id="tabAdmin">
+      <div class="admin-scroll">
+        <div class="admin-title">Admin Panel</div>
+        <div class="admin-sub">Manage drivers, dispatchers, assets, and inspection steps</div>
+        <div class="admin-tabs">
+          <button class="at-btn active" onclick="setAdminTab('drivers')">
+            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">local_shipping</span> Drivers
+          </button>
+          <button class="at-btn" onclick="setAdminTab('dispatchers')">
+            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">assignment_ind</span> Dispatchers
+          </button>
+          <button class="at-btn" onclick="setAdminTab('steps')">
+            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">checklist</span> Steps
+          </button>
+          <button class="at-btn" onclick="setAdminTab('assets')">
+            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">directions_car</span> Assets
+          </button>
+        </div>
+
+        <!-- DRIVERS -->
+        <div class="admin-section active" id="asDrivers">
+          <div class="sec-hd">Add New Driver</div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="drName" placeholder="James Rodriguez"></div>
+            <div class="fg"><label class="flbl">Username *</label><input class="finput" id="drUser" placeholder="jrodriguez" autocapitalize="none"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="drEmail" placeholder="james@company.com"></div>
+            <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="drPass" placeholder="min 6 characters"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Truck Model</label><input class="finput" id="drTruck" placeholder="Freightliner Cascadia 2022"></div>
+            <div class="fg"><label class="flbl">Truck Number</label><input class="finput" id="drTruckNum" placeholder="TRK-003"></div>
+          </div>
+          <button class="btn-form" onclick="createDriver()">
+            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">person_add</span> Add Driver</span>
+            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+          </button>
+          <div class="alert-box" id="drAlert"></div>
+          <div style="height:28px"></div>
+          <div class="sec-hd">All Drivers</div>
+          <div id="driversTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+        </div>
+
+        <!-- DISPATCHERS -->
+        <div class="admin-section" id="asDispatchers">
+          <div class="sec-hd">Add New Dispatcher</div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="diName" placeholder="Sarah Mitchell"></div>
+            <div class="fg"><label class="flbl">Username *</label><input class="finput" id="diUser" placeholder="smitchell" autocapitalize="none"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="diEmail" placeholder="sarah@company.com"></div>
+            <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="diPass" placeholder="min 6 characters"></div>
+          </div>
+          <button class="btn-form" onclick="createDispatcher()">
+            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">person_add</span> Add Dispatcher</span>
+            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+          </button>
+          <div class="alert-box" id="diAlert"></div>
+          <div style="height:28px"></div>
+          <div class="sec-hd">All Dispatchers</div>
+          <div id="dispatchersTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+        </div>
+
+        <!-- STEPS -->
+        <div class="admin-section" id="asSteps">
+          <div class="sec-hd">Manage Inspection Steps</div>
+          <div class="add-step-form">
+            <div class="add-step-form-title">
+              <span class="material-icons-round" style="font-size:18px;vertical-align:-4px;color:var(--brand)">add_circle</span>
+              Add New Step
+            </div>
+            <div class="form-row">
+              <div class="fg">
+                <label class="flbl">Inspection Type</label>
+                <select class="finput" id="newStepType">
+                  <option value="pickup">PickUp</option>
+                  <option value="drop">Drop</option>
+                  <option value="general">General</option>
+                </select>
+              </div>
+              <div class="fg"><label class="flbl">Step Label *</label><input class="finput" id="newStepLabel" placeholder="e.g. Engine Compartment"></div>
+            </div>
+            <div class="fg" style="margin-bottom:14px">
+              <label class="flbl">Instruction *</label>
+              <textarea class="finput" id="newStepInstruction" placeholder="Describe what the driver should photograph…" style="min-height:80px;resize:vertical"></textarea>
+            </div>
+            <button class="btn-form" onclick="addStep()">
+              <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">add</span> Add Step</span>
+              <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+            </button>
+            <div class="alert-box" id="stepAlert"></div>
+          </div>
+          <div style="height:24px"></div>
+          <div class="sec-hd">All Steps</div>
+          <div id="stepsTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+        </div>
+
+        <!-- ASSETS -->
+        <div class="admin-section" id="asAssets">
+          <div class="sec-hd">Add New Trailer / Asset</div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Asset Number *</label><input class="finput" id="assetNum" placeholder="W98754"></div>
+            <div class="fg"><label class="flbl">Year</label><input class="finput" id="assetYear" placeholder="2022"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">Make</label><input class="finput" id="assetMake" placeholder="Utility Trailer"></div>
+            <div class="fg"><label class="flbl">Model</label><input class="finput" id="assetModel" placeholder="DuraPlate"></div>
+          </div>
+          <div class="form-row">
+            <div class="fg"><label class="flbl">VIN</label><input class="finput" id="assetVin" placeholder="3UTVS2534N8536419"></div>
+            <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="assetPlate" placeholder="IL 9R5227"></div>
+          </div>
+          <div class="fg" style="margin-bottom:14px">
+            <label class="flbl">Notes</label>
+            <input class="finput" id="assetNotes" placeholder="Optional notes">
+          </div>
+          <button class="btn-form" onclick="createAsset()">
+            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">add</span> Add Asset</span>
+            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+          </button>
+          <div class="alert-box" id="assetAlert"></div>
+          <div style="height:28px"></div>
+          <div class="sec-hd">All Assets</div>
+          <div id="assetsTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT USER MODAL -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title" id="editModalTitle">Edit User</div>
+      <button class="modal-close" onclick="closeEditModal()">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editUserId">
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Full Name</label><input class="finput" id="editName" placeholder="Full name"></div>
+        <div class="fg"><label class="flbl">Username</label><input class="finput" id="editUsername" placeholder="username" autocapitalize="none"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="editEmail" placeholder="email@company.com"></div>
+        <div class="fg"><label class="flbl">New Password</label><input class="finput" type="password" id="editPass" placeholder="Leave blank to keep current"></div>
+      </div>
+      <div id="editTruckFields">
+        <div class="form-row">
+          <div class="fg"><label class="flbl">Truck Model</label><input class="finput" id="editTruck" placeholder="Freightliner Cascadia"></div>
+          <div class="fg"><label class="flbl">Truck Number</label><input class="finput" id="editTruckNum" placeholder="TRK-001"></div>
+        </div>
+      </div>
+      <button class="btn-form" onclick="saveEditUser()">
+        <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">save</span> Save Changes</span>
+        <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+      </button>
+      <div class="alert-box" id="editAlert"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX with flag button -->
+<div class="lightbox" id="lightbox" onclick="closeLb()">
+  <button class="lb-close" onclick="closeLb()">
+    <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
+  </button>
+  <img class="lb-img" id="lbImg" src="" alt="">
+  <div class="lb-meta" id="lbMeta"></div>
+  <div class="lb-controls" onclick="event.stopPropagation()">
+    <div class="lb-nav">
+      <button onclick="lbNav(-1)"><span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_left</span> Prev</button>
+      <button onclick="lbNav(1)">Next <span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_right</span></button>
+    </div>
+    <button class="lb-flag-btn" id="lbFlagBtn" onclick="toggleFlag()">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">flag</span> Flag Photo
+    </button>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav" id="mobileNav" style="display:none">
+  <button class="mobile-nav-btn active" id="mNavOverview" onclick="showTab('Overview')">
+    <span class="material-icons-round">dashboard</span>Fleet
+  </button>
+  <button class="mobile-nav-btn" id="mNavFeed" onclick="showTab('Feed')">
+    <span class="material-icons-round">history</span>History
+  </button>
+  <button class="mobile-nav-btn" id="mNavAdmin" onclick="showTab('Admin')" style="display:none">
+    <span class="material-icons-round">manage_accounts</span>Admin
+  </button>
+</nav>
+
+<script src="/js/agent.js"></script>
+</body>
+</html>
