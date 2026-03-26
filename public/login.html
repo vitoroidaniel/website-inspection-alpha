@@ -11,19 +11,74 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <link rel="stylesheet" href="/css/styles.css">
+<style>
+  /* ── Login page overrides ── */
+  body { background: #0d1b3e; }
+  body::before { display: none; }
+
+  /* Fullscreen truck background */
+  .login-bg {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      linear-gradient(to bottom, rgba(10,20,50,0.62) 0%, rgba(10,20,50,0.78) 100%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 600'%3E%3Crect fill='%230a1428' width='1200' height='600'/%3E%3C!-- Road --%3E%3Crect fill='%23151f35' x='0' y='420' width='1200' height='180'/%3E%3Crect fill='%231a2540' x='0' y='418' width='1200' height='6'/%3E%3C!-- Road lines --%3E%3Crect fill='%23f59e0b' x='80' y='498' width='120' height='8' rx='4'/%3E%3Crect fill='%23f59e0b' x='300' y='498' width='120' height='8' rx='4'/%3E%3Crect fill='%23f59e0b' x='520' y='498' width='120' height='8' rx='4'/%3E%3Crect fill='%23f59e0b' x='740' y='498' width='120' height='8' rx='4'/%3E%3Crect fill='%23f59e0b' x='960' y='498' width='120' height='8' rx='4'/%3E%3C!-- Stars --%3E%3Ccircle fill='white' cx='100' cy='60' r='1.5' opacity='.8'/%3E%3Ccircle fill='white' cx='220' cy='30' r='1' opacity='.6'/%3E%3Ccircle fill='white' cx='350' cy='80' r='1.5' opacity='.7'/%3E%3Ccircle fill='white' cx='480' cy='40' r='1' opacity='.5'/%3E%3Ccircle fill='white' cx='600' cy='20' r='2' opacity='.9'/%3E%3Ccircle fill='white' cx='720' cy='70' r='1' opacity='.6'/%3E%3Ccircle fill='white' cx='850' cy='35' r='1.5' opacity='.8'/%3E%3Ccircle fill='white' cx='970' cy='55' r='1' opacity='.5'/%3E%3Ccircle fill='white' cx='1100' cy='25' r='2' opacity='.7'/%3E%3Ccircle fill='white' cx='160' cy='110' r='1' opacity='.4'/%3E%3Ccircle fill='white' cx='440' cy='130' r='1.5' opacity='.6'/%3E%3Ccircle fill='white' cx='680' cy='100' r='1' opacity='.5'/%3E%3Ccircle fill='white' cx='900' cy='120' r='1.5' opacity='.7'/%3E%3Ccircle fill='white' cx='1050' cy='90' r='1' opacity='.4'/%3E%3C!-- Moon --%3E%3Ccircle fill='%23fef3c7' cx='1100' cy='80' r='28' opacity='.9'/%3E%3Ccircle fill='%230a1428' cx='1115' cy='72' r='22' opacity='.9'/%3E%3C!-- Mountains --%3E%3Cpolygon fill='%230f1e38' points='0,420 150,200 300,420'/%3E%3Cpolygon fill='%230c1830' points='100,420 280,160 460,420'/%3E%3Cpolygon fill='%230f1e38' points='350,420 530,220 710,420'/%3E%3Cpolygon fill='%230c1830' points='600,420 800,180 1000,420'/%3E%3Cpolygon fill='%230f1e38' points='850,420 1050,210 1200,420'/%3E%3C!-- Snow caps --%3E%3Cpolygon fill='%23e2e8f0' points='150,200 175,240 125,240' opacity='.6'/%3E%3Cpolygon fill='%23e2e8f0' points='280,160 310,205 250,205' opacity='.5'/%3E%3Cpolygon fill='%23e2e8f0' points='800,180 832,225 768,225' opacity='.6'/%3E%3C!-- TRUCK --%3E%3C!-- Trailer body --%3E%3Crect fill='%231e3a6e' x='120' y='300' width='580' height='120' rx='6'/%3E%3Crect fill='%2316305e' x='120' y='296' width='580' height='12' rx='4'/%3E%3C!-- Trailer stripe --%3E%3Crect fill='%231e4da1' x='120' y='340' width='580' height='14'/%3E%3Crect fill='%237c4a1e' x='120' y='354' width='580' height='7'/%3E%3C!-- Trailer doors --%3E%3Crect fill='%23162d5a' x='680' y='306' width='14' height='108' rx='3'/%3E%3Crect fill='%23243d6e' x='686' y='310' width='2' height='100' rx='1'/%3E%3C!-- Trailer lights rear --%3E%3Crect fill='%23ef4444' x='696' y='310' width='8' height='16' rx='2'/%3E%3Crect fill='%23ef4444' x='696' y='396' width='8' height='16' rx='2'/%3E%3C!-- Cab --%3E%3Crect fill='%231e4da1' x='700' y='310' width='180' height='110' rx='10'/%3E%3C!-- Cab windshield --%3E%3Crect fill='%23a8c4f0' x='716' y='322' width='130' height='64' rx='6' opacity='.85'/%3E%3C!-- Cab side window --%3E%3Crect fill='%23a8c4f0' x='852' y='328' width='22' height='42' rx='4' opacity='.7'/%3E%3C!-- Cab door line --%3E%3Cline x1='830' y1='316' x2='830' y2='420' stroke='%23163d85' stroke-width='2'/%3E%3C!-- Cab lights front --%3E%3Crect fill='%23fef08a' x='876' y='344' width='18' height='10' rx='3'/%3E%3Crect fill='%23fef08a' x='876' y='380' width='18' height='8' rx='2' opacity='.7'/%3E%3C!-- Exhaust stack --%3E%3Crect fill='%23334155' x='858' y='272' width='10' height='42' rx='5'/%3E%3Cellipse fill='%23475569' cx='863' cy='272' rx='6' ry='4'/%3E%3C!-- Smoke --%3E%3Ccircle fill='%23475569' cx='863' cy='258' r='8' opacity='.4'/%3E%3Ccircle fill='%23475569' cx='867' cy='244' r='6' opacity='.25'/%3E%3Ccircle fill='%23475569' cx='862' cy='232' r='4' opacity='.15'/%3E%3C!-- Wheels trailer --%3E%3Ccircle fill='%23111827' cx='220' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='220' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='220' cy='420' r='10'/%3E%3Ccircle fill='%23111827' cx='330' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='330' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='330' cy='420' r='10'/%3E%3Ccircle fill='%23111827' cx='560' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='560' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='560' cy='420' r='10'/%3E%3Ccircle fill='%23111827' cx='660' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='660' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='660' cy='420' r='10'/%3E%3C!-- Wheels cab --%3E%3Ccircle fill='%23111827' cx='760' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='760' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='760' cy='420' r='10'/%3E%3Ccircle fill='%23111827' cx='850' cy='420' r='36'/%3E%3Ccircle fill='%231f2937' cx='850' cy='420' r='24'/%3E%3Ccircle fill='%23374151' cx='850' cy='420' r='10'/%3E%3C!-- Ground reflection --%3E%3Cellipse fill='%231e4da1' cx='500' cy='456' rx='380' ry='8' opacity='.12'/%3E%3C/svg%3E") center center / cover no-repeat;
+  }
+
+  /* Page layout */
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  .hdr { display: none; }
+  footer { position: relative; z-index: 1; background: transparent; border: none; }
+  footer span { color: rgba(255,255,255,0.35); }
+
+  main {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px 16px 12px;
+    position: relative; z-index: 1;
+  }
+
+  /* Logo above card */
+  .login-logo {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    margin-bottom: 20px;
+  }
+  .login-logo img {
+    width: 64px; height: 64px; border-radius: 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .login-logo-name {
+    font-size: 28px; font-weight: 900; color: #fff;
+    letter-spacing: -0.8px; text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+  .login-logo-sub {
+    font-size: 12px; color: rgba(255,255,255,0.5);
+    font-weight: 500; margin-top: -6px;
+  }
+
+  /* Card glassmorphism on dark bg */
+  .card {
+    background: rgba(255,255,255,0.97);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.1);
+    max-width: 400px;
+  }
+</style>
 </head>
 <body>
-<header class="hdr">
-  <div class="logo-wrap">
-    <img src="img/logo-inspection.png" class="logo-img" alt="Kurtex logo">
-    <div class="logo-text">Kurtex</div>
-  </div>
-  <span class="dev-credit">by Rekka Software</span>
-</header>
+
+<!-- Fullscreen truck background -->
+<div class="login-bg"></div>
+
+<header class="hdr"></header>
 
 <main>
-  <div class="card">
+  <!-- Logo centered above card -->
+  <div class="login-logo">
+    <img src="img/logo-inspection.png" alt="Kurtex logo">
+    <div class="login-logo-name">Kurtex</div>
+    <div class="login-logo-sub">by Rekka Software</div>
+  </div>
 
+  <div class="card">
     <!-- Welcome Banner -->
     <div class="login-welcome">
       <div class="login-welcome-title">Welcome back 👋</div>
@@ -67,7 +122,6 @@
 
         <div class="divider"><div class="divider-line"></div><span>or</span><div class="divider-line"></div></div>
 
-        <!-- Face ID button — bank-app style -->
         <button class="btn-bio" id="dBioBtn" onclick="biometricLogin('driver')" style="display:none">
           <div class="faceid-icon">
             <span class="material-icons-round bio-icon">face</span>
@@ -120,9 +174,7 @@
         </button>
 
         <div class="err-box" id="aErr"></div>
-        <div class="hint-box">
-          <p>Dispatcher: <strong>dispatch / dispatch123</strong><br>Admin: <strong>admin / admin123</strong></p>
-        </div>
+        <!-- hint-box removed for production -->
       </div>
 
     </div>
