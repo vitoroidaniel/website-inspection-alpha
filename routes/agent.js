@@ -87,6 +87,31 @@ router.get('/api/agent/drivers/:id/inspections', agent, async (req, res) => {
   }
 });
 
+router.get('/api/agent/inspections/incomplete', agent, async (req, res) => {
+  try {
+    const rows = await db.prepare(`
+      SELECT i.*,
+             COUNT(p.id) as photo_count,
+             s.total_steps
+      FROM inspections i
+      LEFT JOIN inspection_photos p ON p.inspection_id = i.id
+      LEFT JOIN (
+        SELECT inspection_type, COUNT(*) as total_steps
+        FROM inspection_steps WHERE active = 1
+        GROUP BY inspection_type
+      ) s ON s.inspection_type = i.inspection_type
+      WHERE i.status = 'in_progress'
+      GROUP BY i.id, s.total_steps
+      ORDER BY i.started_at DESC
+      LIMIT 100
+    `).all();
+    res.json(rows);
+  } catch (e) {
+    console.error('Incomplete inspections error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/api/agent/inspections', agent, async (req, res) => {
   try {
     const rows = await db.prepare(`
