@@ -218,3 +218,70 @@ router.delete('/api/admin/assets/:id', admin, async (req, res) => {
 });
 
 module.exports = router;
+
+// ── Trucks ────────────────────────────────────────────────────────────────────
+
+router.get('/api/admin/trucks', admin, async (req, res) => {
+  try {
+    const rows = await db.prepare(`
+      SELECT t.*, u.full_name as driver_name, u.username as driver_username
+      FROM trucks t
+      LEFT JOIN users u ON u.id = t.driver_id
+      WHERE t.active = 1
+      ORDER BY t.truck_number
+    `).all();
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/api/admin/trucks', admin, async (req, res) => {
+  try {
+    const { truck_number, truck_model, year, make, vin, license_plate, notes, driver_id } = req.body;
+    if (!truck_number) return res.status(400).json({ error: 'Truck number required' });
+    if (await db.prepare('SELECT id FROM trucks WHERE truck_number=? AND active=1').get(truck_number))
+      return res.status(409).json({ error: 'Truck number already exists' });
+    await db.prepare(
+      'INSERT INTO trucks (truck_number,truck_model,year,make,vin,license_plate,notes,driver_id) VALUES (?,?,?,?,?,?,?,?)'
+    ).run(truck_number, truck_model||'', year||'', make||'', vin||'', license_plate||'', notes||'', driver_id||null);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.put('/api/admin/trucks/:id', admin, async (req, res) => {
+  try {
+    const { truck_number, truck_model, year, make, vin, license_plate, notes, driver_id, active } = req.body;
+    const truck = await db.prepare('SELECT * FROM trucks WHERE id=?').get(req.params.id);
+    if (!truck) return res.status(404).json({ error: 'Not found' });
+    if (truck_number !== undefined)    await db.prepare('UPDATE trucks SET truck_number=?   WHERE id=?').run(truck_number, req.params.id);
+    if (truck_model !== undefined)     await db.prepare('UPDATE trucks SET truck_model=?    WHERE id=?').run(truck_model, req.params.id);
+    if (year !== undefined)            await db.prepare('UPDATE trucks SET year=?           WHERE id=?').run(year, req.params.id);
+    if (make !== undefined)            await db.prepare('UPDATE trucks SET make=?           WHERE id=?').run(make, req.params.id);
+    if (vin !== undefined)             await db.prepare('UPDATE trucks SET vin=?            WHERE id=?').run(vin, req.params.id);
+    if (license_plate !== undefined)   await db.prepare('UPDATE trucks SET license_plate=?  WHERE id=?').run(license_plate, req.params.id);
+    if (notes !== undefined)           await db.prepare('UPDATE trucks SET notes=?          WHERE id=?').run(notes, req.params.id);
+    if (active !== undefined)          await db.prepare('UPDATE trucks SET active=?         WHERE id=?').run(active ? 1 : 0, req.params.id);
+    // Assign/unassign driver — also clear from previous driver
+    if (driver_id !== undefined) {
+      await db.prepare('UPDATE trucks SET driver_id=? WHERE id=?').run(driver_id || null, req.params.id);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/api/admin/trucks/:id', admin, async (req, res) => {
+  try {
+    await db.prepare('UPDATE trucks SET active=0, driver_id=NULL WHERE id=?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Assign truck to driver (convenience endpoint)
+router.post('/api/admin/trucks/:id/assign', admin, async (req, res) => {
+  try {
+    const { driver_id } = req.body;
+    // Unassign this truck from whoever had it
+    await db.prepare('UPDATE trucks SET driver_id=NULL WHERE driver_id=? AND id!=?').run(driver_id, req.params.id);
+    await db.prepare('UPDATE trucks SET driver_id=? WHERE id=?').run(driver_id || null, req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});

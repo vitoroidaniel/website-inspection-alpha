@@ -1,301 +1,559 @@
-// database.js — PostgreSQL connection, schema, migrations, seed
-// by Rekka Software
+// Kurtex - Driver Application
+// Designed by Rekka Software
 
-const { Pool } = require('pg');
-const bcrypt   = require('bcryptjs');
+const STEPS = [];
+let S = {
+  step: 0, inspId: null, photos: {}, loc: null,
+  user: null, type: 'pickup', asset: null
+};
 
-if (!process.env.DATABASE_URL) {
-  console.error('❌  DATABASE_URL environment variable is not set.');
-  console.error('    Copy .env.example to .env and set DATABASE_URL.');
-  process.exit(1);
+const TL = { pickup: 'PickUp Trailer', drop: 'Drop Trailer', general: 'General' };
+const SAVE_KEY = 'kurtex_inprogress';
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+  try {
+    const [mr, sr] = await Promise.all([fetch('/api/me'), fetch('/api/inspection-steps?type=pickup')]);
+    if (!mr.ok) { location.href = '/login'; return; }
+    const u = await mr.json();
+    if (u.role !== 'driver') { location.href = '/agent/dashboard'; return; }
+
+    STEPS.length = 0;
+    STEPS.push(...(await sr.json()));
+    S.user = u;
+
+    document.getElementById('dName').textContent = u.name || u.username;
+    document.getElementById('dTruck').textContent = [u.truck_model, u.truck_number].filter(Boolean).join(' · ') || 'No truck assigned';
+    document.getElementById('iName').textContent = u.name || '—';
+    document.getElementById('iTruck').textContent = u.truck_model || '—';
+    document.getElementById('iNum').textContent = u.truck_number || '—';
+
+    updateStepCount();
+    loadRecent();
+    initGPS();
+    await checkBiometricSetup();
+    checkInProgress();
+  } catch (e) { location.href = '/login'; }
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+// ── In-progress resume ────────────────────────────────────────────────────────
+async function checkInProgress() {
+  // Check localStorage first (fastest)
+  const saved = loadFromStorage();
+  if (saved) {
+    showResumeBanner(saved);
+    return;
+  }
+  // Then check server
+  try {
+    const r = await fetch('/api/driver/inspections/in-progress');
+    const d = await r.json();
+    if (d && d.id) {
+      showResumeBanner(d);
+    }
+  } catch (e) {}
+}
 
-// Test connection on startup
-pool.connect()
-  .then(c => { console.log('✅  Database connected'); c.release(); })
-  .catch(e => {
-    console.error('❌  Database connection failed:', e.message);
-    process.exit(1);
+function showResumeBanner(data) {
+  const banner = document.getElementById('resumeBanner');
+  const lbl = document.getElementById('resumeLabel');
+  if (!banner) return;
+  const stepsDone = data.photos ? (Array.isArray(data.photos) ? data.photos.length : Object.keys(data.photos).length) : (data.photo_count || 0);
+  lbl.textContent = `Resume ${TL[data.inspection_type || data.type || 'pickup']} — ${stepsDone} photo${stepsDone !== 1 ? 's' : ''} saved`;
+  banner.style.display = 'flex';
+  banner.dataset.inspId = data.id || data.inspId || '';
+  banner.dataset.type = data.inspection_type || data.type || 'pickup';
+}
+
+async function resumeInspection() {
+  const banner = document.getElementById('resumeBanner');
+  const inspId = banner.dataset.inspId;
+  const type   = banner.dataset.type;
+
+  // Try localStorage first
+  const saved = loadFromStorage();
+  if (saved && saved.inspId === inspId) {
+    S.inspId = saved.inspId;
+    S.type   = saved.type || type;
+    S.photos = saved.photos || {};
+    S.asset  = saved.asset || null;
+
+    // Reload steps for this type
+    const res = await fetch(`/api/inspection-steps?type=${S.type}`);
+    STEPS.length = 0;
+    STEPS.push(...(await res.json()));
+
+    // Find first missing step
+    S.step = 0;
+    for (let i = 0; i < STEPS.length; i++) {
+      if (!S.photos[i]) { S.step = i; break; }
+    }
+
+    updateAssetDisplay();
+    banner.style.display = 'none';
+    renderStep();
+    showScreen('sInspect');
+    return;
+  }
+
+  // Fallback: reload from server
+  try {
+    const r = await fetch('/api/driver/inspections/in-progress');
+    const d = await r.json();
+    if (!d) return;
+
+    S.inspId = d.id;
+    S.type   = d.inspection_type || type;
+    S.asset  = d.asset_number ? { asset_number: d.asset_number, make: d.asset_make, model: d.asset_model } : null;
+
+    const photos = d.photos || [];
+    S.photos = {};
+    photos.forEach(p => { S.photos[p.step_number - 1] = { path: p.file_path, photoId: p.id }; });
+
+    const res = await fetch(`/api/inspection-steps?type=${S.type}`);
+    STEPS.length = 0;
+    STEPS.push(...(await res.json()));
+
+    S.step = 0;
+    for (let i = 0; i < STEPS.length; i++) {
+      if (!S.photos[i]) { S.step = i; break; }
+    }
+
+    updateAssetDisplay();
+    banner.style.display = 'none';
+    renderStep();
+    showScreen('sInspect');
+  } catch (e) { alert('Could not resume. Please start a new inspection.'); }
+}
+
+function dismissResume() {
+  document.getElementById('resumeBanner').style.display = 'none';
+  clearStorage();
+}
+
+// ── LocalStorage save/load ───────────────────────────────────────────────────
+function saveToStorage() {
+  if (!S.inspId) return;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      inspId: S.inspId, type: S.type, photos: S.photos, asset: S.asset,
+      savedAt: Date.now()
+    }));
+  } catch (e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    // Expire after 24 hours
+    if (Date.now() - (d.savedAt || 0) > 86400000) { clearStorage(); return null; }
+    return d;
+  } catch (e) { return null; }
+}
+
+function clearStorage() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+}
+
+// ── Type selection ────────────────────────────────────────────────────────────
+async function setType(t) {
+  S.type = t;
+  ['pickup','drop','general'].forEach(x => {
+    const btn = document.getElementById('typeBtn' + x[0].toUpperCase() + x.slice(1));
+    if (btn) btn.classList.toggle('active', x === t);
   });
-
-// Convert SQLite-style ? placeholders to PostgreSQL $1, $2, ...
-function convertSql(sql) {
-  let i = 0;
-  sql = sql.replace(/\?/g, () => `$${++i}`);
-  sql = sql.replace(/date\('now'\)/gi,     'CURRENT_DATE');
-  sql = sql.replace(/datetime\('now'\)/gi, 'NOW()');
-  return sql;
+  const res = await fetch(`/api/inspection-steps?type=${t}`);
+  STEPS.length = 0;
+  STEPS.push(...(await res.json()));
+  updateStepCount();
 }
 
-const db = {
-  prepare: (sql) => {
-    const pgSql = convertSql(sql);
-    return {
-      get:  async (...args) => { const r = await pool.query(pgSql, args); return r.rows[0] || null; },
-      all:  async (...args) => { const r = await pool.query(pgSql, args); return r.rows; },
-      run:  async (...args) => { const r = await pool.query(pgSql, args); return r; },
-    };
-  },
-  exec: async (sql) => pool.query(sql),
-};
+function updateStepCount() {
+  document.getElementById('iSteps').textContent = STEPS.length;
+  document.getElementById('startBadge').textContent = STEPS.length + ' steps';
+}
 
-// ── Schema ────────────────────────────────────────────────────────────────────
-const initDatabase = async () => {
+// ── GPS ──────────────────────────────────────────────────────────────────────
+function initGPS() {
+  if (!navigator.geolocation) { setGPS(false, 'GPS not available'); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { S.loc = { lat: p.coords.latitude, lng: p.coords.longitude }; setGPS(true, `GPS locked — ${p.coords.latitude.toFixed(4)}, ${p.coords.longitude.toFixed(4)}`); },
+    () => setGPS(false, 'Location access denied'),
+    { enableHighAccuracy: true, timeout: 12000 }
+  );
+}
 
-  // Users — drivers and dispatchers (no truck data here, see trucks table)
-  await pool.query(`CREATE TABLE IF NOT EXISTS users (
-    id            SERIAL PRIMARY KEY,
-    username      TEXT UNIQUE NOT NULL,
-    email         TEXT UNIQUE,
-    password_hash TEXT NOT NULL,
-    full_name     TEXT NOT NULL,
-    role          TEXT NOT NULL CHECK(role IN ('driver','agent','superadmin')),
-    active        INTEGER NOT NULL DEFAULT 1,
-    created_at    TIMESTAMP DEFAULT NOW()
-  )`);
+function setGPS(ok, txt) {
+  const dot = document.getElementById('gpsDot'), text = document.getElementById('gpsText');
+  if (dot) dot.className = 'gps-dot ' + (ok ? 'on' : 'err');
+  if (text) text.textContent = txt;
+}
 
-  // Trucks — owned separately, assigned to a driver
-  await pool.query(`CREATE TABLE IF NOT EXISTS trucks (
-    id            SERIAL PRIMARY KEY,
-    truck_number  TEXT NOT NULL,
-    truck_model   TEXT NOT NULL DEFAULT '',
-    year          TEXT DEFAULT '',
-    make          TEXT DEFAULT '',
-    vin           TEXT DEFAULT '',
-    license_plate TEXT DEFAULT '',
-    notes         TEXT DEFAULT '',
-    driver_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    active        INTEGER NOT NULL DEFAULT 1,
-    created_at    TIMESTAMP DEFAULT NOW()
-  )`);
+// ── Recent inspections ────────────────────────────────────────────────────────
+async function loadRecent() {
+  try {
+    const rows = await (await fetch('/api/driver/inspections')).json();
+    const el = document.getElementById('recentList');
+    if (!rows.length) { el.innerHTML = '<p style="font-size:16px;color:var(--dim);font-weight:600">No inspections yet.</p>'; return; }
+    el.innerHTML = rows.filter(i => i.status === 'submitted').slice(0,5).map(i => `
+      <div class="insp-row">
+        <div>
+          <div class="insp-meta">${fmtDate(i.submitted_at || i.started_at)}</div>
+          <div class="insp-info">
+            <span class="type-chip ${i.inspection_type||'pickup'}">${TL[i.inspection_type||'pickup']}</span>
+            ${i.asset_number ? '<strong>' + i.asset_number + '</strong> · ' : ''}${i.photo_count} photo${i.photo_count !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <div class="status-pill submitted">Submitted</div>
+      </div>`).join('');
+  } catch (e) {}
+}
 
-  // Trailers / Assets
-  await pool.query(`CREATE TABLE IF NOT EXISTS assets (
-    id            SERIAL PRIMARY KEY,
-    asset_number  TEXT NOT NULL,
-    year          TEXT DEFAULT '',
-    make          TEXT DEFAULT '',
-    model         TEXT DEFAULT '',
-    vin           TEXT DEFAULT '',
-    license_plate TEXT DEFAULT '',
-    notes         TEXT DEFAULT '',
-    active        INTEGER NOT NULL DEFAULT 1,
-    created_at    TIMESTAMP DEFAULT NOW()
-  )`);
-
-  // WebAuthn credentials (Face ID)
-  await pool.query(`CREATE TABLE IF NOT EXISTS webauthn_credentials (
-    id            SERIAL PRIMARY KEY,
-    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    credential_id TEXT UNIQUE NOT NULL,
-    public_key    TEXT NOT NULL,
-    counter       INTEGER NOT NULL DEFAULT 0,
-    transports    TEXT DEFAULT '[]',
-    created_at    TIMESTAMP DEFAULT NOW()
-  )`);
-
-  // Inspections — snapshot of truck/trailer data at time of inspection
-  await pool.query(`CREATE TABLE IF NOT EXISTS inspections (
-    id                   TEXT PRIMARY KEY,
-    driver_id            INTEGER NOT NULL REFERENCES users(id),
-    driver_name          TEXT NOT NULL,
-    truck_id             INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
-    truck_number         TEXT,
-    truck_model          TEXT,
-    asset_id             INTEGER REFERENCES assets(id) ON DELETE SET NULL,
-    asset_number         TEXT,
-    asset_year           TEXT,
-    asset_make           TEXT,
-    asset_model          TEXT,
-    asset_vin            TEXT,
-    asset_license_plate  TEXT,
-    inspection_type      TEXT NOT NULL DEFAULT 'pickup',
-    status               TEXT NOT NULL DEFAULT 'in_progress',
-    latitude             REAL,
-    longitude            REAL,
-    notes                TEXT,
-    started_at           TIMESTAMP,
-    submitted_at         TIMESTAMP
-  )`);
-
-  // Inspection photos
-  await pool.query(`CREATE TABLE IF NOT EXISTS inspection_photos (
-    id            SERIAL PRIMARY KEY,
-    inspection_id TEXT NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
-    step_number   INTEGER NOT NULL,
-    step_label    TEXT,
-    file_path     TEXT NOT NULL,
-    latitude      REAL,
-    longitude     REAL,
-    flagged       INTEGER NOT NULL DEFAULT 0,
-    flag_note     TEXT DEFAULT '',
-    taken_at      TIMESTAMP
-  )`);
-
-  // Inspection steps (configurable per type)
-  await pool.query(`CREATE TABLE IF NOT EXISTS inspection_steps (
-    id              SERIAL PRIMARY KEY,
-    inspection_type TEXT NOT NULL DEFAULT 'pickup',
-    step_number     INTEGER NOT NULL,
-    label           TEXT NOT NULL,
-    instruction     TEXT NOT NULL,
-    active          INTEGER NOT NULL DEFAULT 1
-  )`);
-
-  // ── Safe migrations for existing deployments ──────────────────────────────
-  const migrations = [
-    // users: remove old truck columns if they exist (moved to trucks table)
-    `ALTER TABLE users DROP COLUMN IF EXISTS truck_model`,
-    `ALTER TABLE users DROP COLUMN IF EXISTS truck_number`,
-    // trucks table
-    `ALTER TABLE trucks ADD COLUMN IF NOT EXISTS year TEXT DEFAULT ''`,
-    `ALTER TABLE trucks ADD COLUMN IF NOT EXISTS make TEXT DEFAULT ''`,
-    `ALTER TABLE trucks ADD COLUMN IF NOT EXISTS vin  TEXT DEFAULT ''`,
-    `ALTER TABLE trucks ADD COLUMN IF NOT EXISTS license_plate TEXT DEFAULT ''`,
-    `ALTER TABLE trucks ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`,
-    // inspections: add truck_id FK
-    `ALTER TABLE inspections ADD COLUMN IF NOT EXISTS truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL`,
-    `ALTER TABLE inspections ADD COLUMN IF NOT EXISTS truck_number TEXT`,
-    `ALTER TABLE inspections ADD COLUMN IF NOT EXISTS truck_model  TEXT`,
-    // assets
-    `ALTER TABLE assets ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`,
-    // inspection_photos: drop taken_at NOT NULL if it exists with constraint
-    `ALTER TABLE inspection_photos ADD COLUMN IF NOT EXISTS flag_note TEXT DEFAULT ''`,
-    `ALTER TABLE inspection_photos ADD COLUMN IF NOT EXISTS flagged INTEGER NOT NULL DEFAULT 0`,
-  ];
-
-  for (const m of migrations) {
-    try { await pool.query(m); } catch (_) {}
-  }
-
-  // ── Seed inspection steps ─────────────────────────────────────────────────
-  const sc = await pool.query('SELECT COUNT(*) as c FROM inspection_steps');
-  if (parseInt(sc.rows[0].c) === 0) {
-    const steps = [
-      ['pickup', 1,'Engine Hours','Photograph the engine hours display clearly. Ensure reading is visible.'],
-      ['pickup', 2,'Trailer Annual Inspection','Photograph annual inspection sticker. Expiration date must be visible.'],
-      ['pickup', 3,'Trailer Registration','Photograph the trailer registration document. All text must be legible.'],
-      ['pickup', 4,'Front Driver Side Corner','Stand at front driver-side corner. Capture bumper, corner, front frame.'],
-      ['pickup', 5,'Driver Side Landing Gear','Photograph driver-side landing gear fully. Show condition and position.'],
-      ['pickup', 6,'Fuel Level','Photograph the fuel gauge or fuel level indicator clearly.'],
-      ['pickup', 7,'Spare Tire','Photograph the spare tire. Show mounting, condition, and tread.'],
-      ['pickup', 8,'Driver Side of Trailer (3 pics)','Take at least 3 photos of full driver side from front to rear.'],
-      ['pickup', 9,'Driver Side Front Axel (3 pics)','At least 3 close-up photos of front axel tires on driver side.'],
-      ['pickup',10,'Driver Side Rear Axel (3 pics)','At least 3 close-up photos of rear axel tires on driver side.'],
-      ['pickup',11,'Back of Trailer + Lights On','Capture full rear of trailer with all lights illuminated and working.'],
-      ['pickup',12,'Inside Trailer / Doors','Open trailer doors. Photograph interior, door condition, and seals.'],
-      ['pickup',13,'License Plate Light','Close-up of license plate and its light. Ensure plate is legible.'],
-      ['pickup',14,'Passenger Side Rear Axel (3 pics)','At least 3 close-up photos of rear axel tires on passenger side.'],
-      ['pickup',15,'Passenger Side Front Axel (3 pics)','At least 3 close-up photos of front axel tires on passenger side.'],
-      ['pickup',16,'Passenger Side of Trailer (3 pics)','Take at least 3 photos of full passenger side from front to rear.'],
-      ['pickup',17,'Passenger Side Landing Gear','Photograph passenger-side landing gear. Show condition and position.'],
-      ['pickup',18,'Front Crossmember','Photograph the front crossmember. Show any damage or wear.'],
-      ['pickup',19,'Passenger Side Front Corner','Stand at passenger-side front corner. Capture bumper, corner, frame.'],
-      ['pickup',20,'Front of Trailer','Photograph the full front face of the trailer.'],
-      ['pickup',21,'Engine Compartment','Open reefer unit doors. Take 2-3 pictures of engine compartment interior.'],
-      ['drop',  1,'Front Driver Side Corner','Stand at front driver-side corner. Capture bumper, corner, front frame.'],
-      ['drop',  2,'Trailer Annual Inspection','Photograph annual inspection sticker. Expiration date must be visible.'],
-      ['drop',  3,'Trailer Registration','Photograph the trailer registration document. All text must be legible.'],
-      ['drop',  4,'Driver Side Landing Gear','Photograph driver-side landing gear fully. Show condition and position.'],
-      ['drop',  5,'Fuel Level','Photograph the fuel gauge or fuel level indicator clearly.'],
-      ['drop',  6,'Driver Side of Trailer (3 pics)','Take at least 3 photos of full driver side from front to rear.'],
-      ['drop',  7,'Spare Tire','Photograph the spare tire. Show mounting, condition, and tread.'],
-      ['drop',  8,'Driver Side Front Axel (3 pics)','At least 3 close-up photos of front axel tires on driver side.'],
-      ['drop',  9,'Driver Side Rear Axel (3 pics)','At least 3 close-up photos of rear axel tires on driver side.'],
-      ['drop', 10,'Back of Trailer + Lights On','Capture full rear of trailer with all lights illuminated and working.'],
-      ['drop', 11,'Inside Trailer / Doors','Open trailer doors. Photograph interior, door condition, and seals.'],
-      ['drop', 12,'License Plate Light','Close-up of license plate and its light. Ensure plate is legible.'],
-      ['drop', 13,'Passenger Side Rear Axel (3 pics)','At least 3 close-up photos of rear axel tires on passenger side.'],
-      ['drop', 14,'Passenger Side Front Axel (3 pics)','At least 3 close-up photos of front axel tires on passenger side.'],
-      ['drop', 15,'Passenger Side of Trailer (3 pics)','Take at least 3 photos of full passenger side from front to rear.'],
-      ['drop', 16,'Passenger Side Landing Gear','Photograph passenger-side landing gear. Show condition and position.'],
-      ['drop', 17,'Front Crossmember','Photograph the front crossmember. Show any damage or wear.'],
-      ['drop', 18,'Passenger Side Front Corner','Stand at passenger-side front corner. Capture bumper, corner, frame.'],
-      ['drop', 19,'Front of Trailer','Photograph the full front face of the trailer.'],
-      ['drop', 20,'Engine Compartment','Open reefer unit doors. Take 2-3 pictures of engine compartment interior.'],
-      ['general',1,'Front of Trailer','Photograph the full front face of the trailer.'],
-      ['general',2,'Driver Side Front Corner','Stand at front driver-side corner. Capture bumper, corner, front frame.'],
-      ['general',3,'Engine Hours','Photograph the engine hours display clearly. Ensure reading is visible.'],
-      ['general',4,'Annual Inspection','Photograph annual inspection sticker. Expiration date must be visible.'],
-      ['general',5,'Trailer Registration','Photograph the trailer registration document. All text must be legible.'],
-      ['general',6,'Fuel Level','Photograph the fuel gauge or fuel level indicator clearly.'],
-      ['general',7,'Driver Side Landing Gear','Photograph driver-side landing gear fully. Show condition and position.'],
-      ['general',8,'Driver Side of Trailer (3 pics)','Take at least 3 photos of full driver side from front to rear.'],
-      ['general',9,'Driver Side Front Axel (3 pics)','At least 3 close-up photos of front axel tires on driver side.'],
-      ['general',10,'Driver Side Rear Axel (3 pics)','At least 3 close-up photos of rear axel tires on driver side.'],
-      ['general',11,'Back of Trailer + Lights On','Capture full rear of trailer with all lights illuminated and working.'],
-      ['general',12,'License Plate Light','Close-up of license plate and its light. Ensure plate is legible.'],
-      ['general',13,'Passenger Side of Trailer (3 pics)','Take at least 3 photos of full passenger side from front to rear.'],
-      ['general',14,'Passenger Side Landing Gear','Photograph passenger-side landing gear. Show condition and position.'],
-      ['general',15,'Passenger Side Front Corner','Stand at passenger-side front corner. Capture bumper, corner, frame.'],
-      ['general',16,'Engine Compartment','Open reefer unit doors. Take 2-3 pictures of engine compartment interior.'],
-    ];
-    for (const s of steps) {
-      await pool.query(
-        'INSERT INTO inspection_steps (inspection_type,step_number,label,instruction) VALUES ($1,$2,$3,$4)', s
-      );
+// ── Trailer / Asset selection ─────────────────────────────────────────────────
+async function openTrailerModal() {
+  const modal = document.getElementById('trailerModal');
+  const list  = document.getElementById('trailerList');
+  modal.classList.add('open');
+  list.innerHTML = '<div style="padding:16px;color:var(--dim);font-weight:600">Loading trailers…</div>';
+  try {
+    const assets = await (await fetch('/api/assets')).json();
+    if (!assets.length) {
+      list.innerHTML = '<div style="padding:16px;color:var(--dim);font-weight:600">No trailers registered. Contact your dispatcher.</div>';
+      return;
     }
-    console.log('✅  Seeded inspection steps');
+    list.innerHTML = assets.map(a => `
+      <div class="trailer-row${S.asset?.id === a.id ? ' sel' : ''}" onclick="selectTrailer(${a.id},'${esc(a.asset_number)}','${esc(a.make)}','${esc(a.model)}','${esc(a.year)}','${esc(a.vin)}','${esc(a.license_plate)}')">
+        <div class="trailer-num">${esc(a.asset_number)}</div>
+        <div class="trailer-info">${[a.year, a.make, a.model].filter(Boolean).join(' ')}</div>
+        <div class="trailer-vin">${a.vin || ''}</div>
+        ${S.asset?.id === a.id ? '<span class="trailer-sel-badge">Selected</span>' : ''}
+      </div>`).join('');
+  } catch (e) {
+    list.innerHTML = '<div style="padding:16px;color:var(--red);font-weight:600">Error loading trailers.</div>';
   }
+}
 
-  // ── Seed default users ────────────────────────────────────────────────────
-  const uc = await pool.query('SELECT COUNT(*) as c FROM users');
-  if (parseInt(uc.rows[0].c) === 0) {
-    await pool.query(
-      'INSERT INTO users (username,email,password_hash,full_name,role) VALUES ($1,$2,$3,$4,$5)',
-      ['admin','admin@kurtex.com', bcrypt.hashSync('admin123',10), 'System Admin', 'superadmin']
-    );
-    await pool.query(
-      'INSERT INTO users (username,email,password_hash,full_name,role) VALUES ($1,$2,$3,$4,$5)',
-      ['dispatch','dispatch@kurtex.com', bcrypt.hashSync('dispatch123',10), 'Sarah Mitchell', 'agent']
-    );
-    // Seed driver1
-    const d1 = await pool.query(
-      'INSERT INTO users (username,email,password_hash,full_name,role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      ['driver1','james@kurtex.com', bcrypt.hashSync('driver123',10), 'James Rodriguez', 'driver']
-    );
-    // Seed driver2
-    const d2 = await pool.query(
-      'INSERT INTO users (username,email,password_hash,full_name,role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      ['driver2','mike@kurtex.com', bcrypt.hashSync('driver123',10), 'Mike Thompson', 'driver']
-    );
-    // Seed trucks assigned to drivers
-    await pool.query(
-      'INSERT INTO trucks (truck_number,truck_model,year,make,driver_id) VALUES ($1,$2,$3,$4,$5)',
-      ['TRK-001','Freightliner Cascadia','2022','Freightliner', d1.rows[0].id]
-    );
-    await pool.query(
-      'INSERT INTO trucks (truck_number,truck_model,year,make,driver_id) VALUES ($1,$2,$3,$4,$5)',
-      ['TRK-002','Kenworth T680','2021','Kenworth', d2.rows[0].id]
-    );
-    console.log('✅  Seeded users and trucks');
+function selectTrailer(id, num, make, model, year, vin, plate) {
+  S.asset = { id, asset_number: num, make, model, year, vin, license_plate: plate };
+  updateAssetDisplay();
+  closeTrailerModal();
+}
+
+function clearTrailer() {
+  S.asset = null;
+  updateAssetDisplay();
+}
+
+function updateAssetDisplay() {
+  const el = document.getElementById('selectedAsset');
+  const clearBtn = document.getElementById('clearAssetBtn');
+  if (!el) return;
+  if (S.asset) {
+    el.textContent = S.asset.asset_number + (S.asset.make ? ' — ' + [S.asset.make, S.asset.model].filter(Boolean).join(' ') : '');
+    el.style.color = 'var(--brand)';
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+  } else {
+    el.textContent = 'No trailer selected (optional)';
+    el.style.color = 'var(--muted)';
+    if (clearBtn) clearBtn.style.display = 'none';
   }
+}
 
-  // ── Seed sample assets/trailers ───────────────────────────────────────────
-  const ac = await pool.query('SELECT COUNT(*) as c FROM assets');
-  if (parseInt(ac.rows[0].c) === 0) {
-    const assets = [
-      ['W98754','2022','Utility','n/a','3UTVS2534N8536419','n/a'],
-      ['T12345','2021','Great Dane','Champion','1GRAA0629KB700001','IL 9R5227'],
-      ['T67890','2020','Wabash','DuraPlate','1JJV532D9NL000123','IN 8X4411'],
-    ];
-    for (const a of assets) {
-      await pool.query(
-        'INSERT INTO assets (asset_number,year,make,model,vin,license_plate) VALUES ($1,$2,$3,$4,$5,$6)', a
-      );
-    }
-    console.log('✅  Seeded sample trailers');
+function closeTrailerModal() { document.getElementById('trailerModal').classList.remove('open'); }
+
+// ── Start inspection ──────────────────────────────────────────────────────────
+async function startInspection() {
+  if (!STEPS.length) { alert('No steps configured. Contact your dispatcher.'); return; }
+  try {
+    const body = { inspection_type: S.type };
+    if (S.asset?.id) body.asset_id = S.asset.id;
+
+    const r = await fetch('/api/inspections/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error();
+
+    S.inspId = d.inspectionId;
+    S.step = 0;
+    S.photos = {};
+    saveToStorage();
+    renderStep();
+    showScreen('sInspect');
+  } catch (e) { alert('Could not start. Check connection.'); }
+}
+
+// ── Render step ───────────────────────────────────────────────────────────────
+function renderStep() {
+  const i = S.step, s = STEPS[i];
+  document.getElementById('sCtr').textContent = `${i+1} / ${STEPS.length}`;
+  document.getElementById('progFill').style.width = `${(i/STEPS.length)*100}%`;
+  document.getElementById('sLabel').textContent = s.label;
+  document.getElementById('sEye').textContent = `STEP ${i+1} OF ${STEPS.length}`;
+  document.getElementById('sTitle').textContent = s.label;
+  document.getElementById('sDesc').textContent = s.instruction;
+
+  document.getElementById('stepDots').innerHTML = STEPS.map((_,j) =>
+    `<div class="sdot${j<i?' done':j===i?' active':''}"></div>`).join('');
+
+  const p = S.photos[i];
+  const prev = document.getElementById('phPreview'), ph = document.getElementById('phPlaceholder');
+  const badge = document.getElementById('phBadge'), rb = document.getElementById('retakeBtn');
+  const cb = document.getElementById('camBtn'), pz = document.getElementById('photoZone');
+  const bn = document.getElementById('btnNext');
+
+  document.getElementById('phErr').style.display = 'none';
+  document.getElementById('uploadOverlay').style.display = 'none';
+
+  if (p) {
+    prev.src = p.path; prev.style.display = 'block';
+    ph.style.display = 'none'; badge.style.display = 'flex';
+    rb.style.display = 'block'; cb.style.display = 'none';
+    pz.classList.add('captured'); pz.onclick = null;
+    bn.disabled = false;
+    bn.textContent = i === STEPS.length - 1 ? 'Review & Submit' : 'Continue';
+  } else {
+    prev.style.display = 'none'; ph.style.display = 'flex';
+    badge.style.display = 'none'; rb.style.display = 'none';
+    cb.style.display = 'flex'; pz.classList.remove('captured');
+    pz.onclick = triggerCam; bn.disabled = true;
+    bn.textContent = 'Continue';
   }
-};
+}
 
-initDatabase().catch(err => {
-  console.error('❌  DB init error:', err.message);
-  process.exit(1);
+// ── Camera ────────────────────────────────────────────────────────────────────
+function triggerCam() { document.getElementById('camInput').click(); }
+
+function retake(e) {
+  e.stopPropagation();
+  S.photos[S.step] = null;
+  renderStep();
+  document.getElementById('camInput').click();
+}
+
+document.getElementById('camInput').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  const i = S.step;
+  const prev = document.getElementById('phPreview'), ph = document.getElementById('phPlaceholder');
+  const overlay = document.getElementById('uploadOverlay'), err = document.getElementById('phErr');
+
+  const reader = new FileReader();
+  reader.onload = e => { prev.src = e.target.result; prev.style.display = 'block'; ph.style.display = 'none'; };
+  reader.readAsDataURL(file);
+
+  overlay.style.display = 'flex'; err.style.display = 'none';
+
+  try {
+    const form = new FormData();
+    form.append('photo', file);
+    form.append('stepLabel', STEPS[i].label);
+    if (S.loc) { form.append('latitude', S.loc.lat); form.append('longitude', S.loc.lng); }
+
+    const r = await fetch(`/api/inspections/${S.inspId}/step/${i+1}/photo`, { method: 'POST', body: form });
+    const d = await r.json();
+    if (!r.ok) throw new Error();
+
+    S.photos[i] = { path: d.path, photoId: d.photoId };
+    saveToStorage(); // Auto-save after each photo
+    renderStep();
+  } catch (e) {
+    overlay.style.display = 'none'; prev.style.display = 'none'; ph.style.display = 'flex';
+    err.textContent = 'Upload failed — try again.'; err.style.display = 'block';
+  }
+  this.value = '';
 });
 
-module.exports = db;
+// ── Navigation ────────────────────────────────────────────────────────────────
+function nextStep() {
+  if (!S.photos[S.step]) return;
+  if (S.step === STEPS.length - 1) { showReview(); return; }
+  S.step++;
+  renderStep();
+  document.querySelector('.inspect-body').scrollTop = 0;
+}
+
+function prevStep() {
+  if (S.step === 0) { showScreen('sHome'); return; }
+  S.step--;
+  renderStep();
+}
+
+function goBackToPhotos() { S.step = STEPS.length - 1; renderStep(); showScreen('sInspect'); }
+
+// ── Review ────────────────────────────────────────────────────────────────────
+function showReview() {
+  document.getElementById('revCount').textContent = Object.keys(S.photos).length;
+  document.getElementById('revGrid').innerHTML = STEPS.map((s, i) => {
+    const p = S.photos[i];
+    return `<div class="r-thumb">
+      ${p ? `<img src="${p.path}" loading="lazy"><div class="r-thumb-ok"><svg viewBox="0 0 10 10" fill="none"><polyline points="2,5 4.5,7.5 8,2.5" stroke="white" stroke-width="2"/></svg></div>` : `<div class="r-missing" style="font-size:16px;font-weight:900;color:var(--red)">—</div>`}
+      <div class="r-thumb-num">${i+1}</div>
+    </div>`;
+  }).join('');
+
+  const tl = TL[S.type] || 'Inspection';
+  document.getElementById('revType').textContent = tl + ' Inspection';
+  document.getElementById('revDriver').textContent = S.user?.name || '—';
+  document.getElementById('revTruck').textContent = S.user?.truck_model || '—';
+  document.getElementById('revNum').textContent = S.user?.truck_number || '—';
+  document.getElementById('revTypeRow').textContent = tl;
+  document.getElementById('revTrailer').textContent = S.asset ? S.asset.asset_number + (S.asset.make ? ' — '+[S.asset.make,S.asset.model].filter(Boolean).join(' ') : '') : 'Not selected';
+  document.getElementById('revTime').textContent = new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  if (S.loc) {
+    const lt = S.loc.lat.toFixed(5), lg = S.loc.lng.toFixed(5);
+    document.getElementById('revLoc').innerHTML = `<a href="https://maps.google.com/?q=${lt},${lg}" target="_blank">${lt}, ${lg}</a>`;
+  } else {
+    document.getElementById('revLoc').textContent = 'Not available';
+  }
+  showScreen('sReview');
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitInspection() {
+  const btn = document.getElementById('btnSubmit'), txt = document.getElementById('submitTxt');
+  btn.disabled = true; txt.textContent = 'Submitting…';
+  try {
+    const body = { notes: document.getElementById('notesInput').value };
+    if (S.loc) { body.latitude = S.loc.lat; body.longitude = S.loc.lng; }
+    const r = await fetch(`/api/inspections/${S.inspId}/submit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error();
+    clearStorage(); // Clear saved progress on success
+    showScreen('sSuccess');
+  } catch (e) { btn.disabled = false; txt.textContent = 'Submit Inspection'; alert('Submission failed.'); }
+}
+
+function newInspection() {
+  S = { step: 0, inspId: null, photos: {}, loc: S.loc, user: S.user, type: S.type, asset: null };
+  document.getElementById('notesInput').value = '';
+  updateAssetDisplay();
+  loadRecent();
+  showScreen('sHome');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function updateAssetDisplay() {
+  const el = document.getElementById('selectedAsset'), clearBtn = document.getElementById('clearAssetBtn');
+  if (!el) return;
+  if (S.asset) {
+    el.textContent = S.asset.asset_number + (S.asset.make ? ' — ' + [S.asset.make, S.asset.model].filter(Boolean).join(' ') : '');
+    el.style.color = 'var(--brand)';
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+  } else {
+    el.textContent = 'No trailer selected (optional)';
+    el.style.color = 'var(--muted)';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+}
+
+function fmtDate(dt) {
+  if (!dt) return 'N/A';
+  const d = new Date(dt.includes('T') ? dt : dt+'Z');
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function esc(s) { return String(s||'').replace(/'/g, "\\'"); }
+
+async function logout() { await fetch('/api/logout',{method:'POST'}); location.href='/login'; }
+
+// ── Settings – Biometric ─────────────────────────────────────────────────────
+async function checkBiometricSetup() {
+  try {
+    const r = await fetch('/api/auth/webauthn/has-credential');
+    const d = await r.json();
+    const badge = document.getElementById('bioSetupBadge');
+    if (badge) { badge.textContent = d.registered ? 'Setup' : 'Not Setup'; badge.className = 'setting-status '+(d.registered?'setup':'not-setup'); }
+  } catch (e) {}
+}
+
+function openSettings() { document.getElementById('settingsModal').classList.add('open'); checkBiometricSetupForSettings(); }
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+
+async function checkBiometricSetupForSettings() {
+  try {
+    const r = await fetch('/api/auth/webauthn/has-credential');
+    const d = await r.json();
+    const setupBtn = document.getElementById('setupBioBtn'), removeBtn = document.getElementById('removeBioBtn'), badge = document.getElementById('bioSetupBadge');
+    if (d.registered) { setupBtn.style.display='none'; removeBtn.style.display='block'; badge.textContent='Setup'; badge.className='setting-status setup'; }
+    else { setupBtn.style.display='block'; removeBtn.style.display='none'; badge.textContent='Not Setup'; badge.className='setting-status not-setup'; }
+  } catch (e) {}
+}
+
+async function setupBiometric() {
+  const alertEl = document.getElementById('settingsAlert'), setupBtn = document.getElementById('setupBioBtn');
+  if (!window.PublicKeyCredential) { showAlert(alertEl,'error','Face ID is not supported on this browser.'); return; }
+  setupBtn.disabled = true; setupBtn.textContent = 'Scanning…'; alertEl.style.display = 'none';
+  try {
+    const optRes = await fetch('/api/auth/webauthn/register-options',{method:'POST',headers:{'Content-Type':'application/json'}});
+    if (!optRes.ok) { showAlert(alertEl,'error','Could not start Face ID setup.'); return; }
+    const opts = await optRes.json();
+    opts.challenge = new TextEncoder().encode(opts.challenge);
+    opts.user.id = Uint8Array.from(atob(opts.user.id), x => x.charCodeAt(0));
+    const credential = await navigator.credentials.create({ publicKey: opts });
+    const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    let publicKey = '';
+    try { const pkBuffer = credential.response.getPublicKey?.(); if (pkBuffer) publicKey = btoa(String.fromCharCode(...new Uint8Array(pkBuffer))); } catch (_) {}
+    const regRes = await fetch('/api/auth/webauthn/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credentialId:credId,publicKey,transports:['internal']})});
+    const regData = await regRes.json();
+    if (!regRes.ok) { showAlert(alertEl,'error',regData.error||'Registration failed.'); return; }
+    showAlert(alertEl,'ok','Face ID set up! You can now log in with Face ID on the login screen.');
+    checkBiometricSetupForSettings();
+  } catch (e) {
+    if (e.name==='NotAllowedError') {} // user cancelled
+    else if (e.name==='InvalidStateError') showAlert(alertEl,'error','Face ID already registered on this device.');
+    else showAlert(alertEl,'error','Setup failed: '+(e.message||'Please try again.'));
+  } finally { setupBtn.disabled=false; setupBtn.textContent='Setup'; }
+}
+
+async function removeBiometric() {
+  if (!confirm('Remove biometric login? You can set it up again anytime.')) return;
+  const alertEl = document.getElementById('settingsAlert');
+  try {
+    await fetch('/api/auth/webauthn/remove-credential',{method:'POST',headers:{'Content-Type':'application/json'}});
+    showAlert(alertEl,'ok','Biometric removed');
+    checkBiometricSetupForSettings();
+  } catch (e) { showAlert(alertEl,'error','Failed to remove biometric'); }
+}
+
+function showAlert(el, type, msg) {
+  el.textContent = msg;
+  el.style.color = type==='ok'?'#16a34a':'var(--red)';
+  el.style.borderColor = type==='ok'?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)';
+  el.style.background = type==='ok'?'var(--green-light)':'var(--red-light)';
+  el.style.display = 'block';
+  if (type==='ok') setTimeout(()=>el.style.display='none',3000);
+}
+
+// Exports
+window.setType = setType;
+window.startInspection = startInspection;
+window.triggerCam = triggerCam;
+window.retake = retake;
+window.nextStep = nextStep;
+window.prevStep = prevStep;
+window.goBackToPhotos = goBackToPhotos;
+window.submitInspection = submitInspection;
+window.newInspection = newInspection;
+window.logout = logout;
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.setupBiometric = setupBiometric;
+window.removeBiometric = removeBiometric;
+window.openTrailerModal = openTrailerModal;
+window.closeTrailerModal = closeTrailerModal;
+window.selectTrailer = selectTrailer;
+window.clearTrailer = clearTrailer;
+window.resumeInspection = resumeInspection;
+window.dismissResume = dismissResume;

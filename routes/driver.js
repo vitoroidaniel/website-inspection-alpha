@@ -41,6 +41,11 @@ router.post('/api/inspections/start', driver, async (req, res) => {
     const { inspection_type, asset_id } = req.body;
     const type = inspection_type || 'pickup';
 
+    // Get assigned truck for this driver
+    const truck = await db
+      .prepare('SELECT * FROM trucks WHERE driver_id=? AND active=1 LIMIT 1')
+      .get(u.id);
+
     let assetData = {};
     if (asset_id) {
       const asset = await db
@@ -61,14 +66,15 @@ router.post('/api/inspections/start', driver, async (req, res) => {
 
     await db.prepare(`
       INSERT INTO inspections
-        (id, driver_id, driver_name, truck_model, truck_number,
+        (id, driver_id, driver_name, truck_id, truck_number, truck_model,
          asset_id, asset_number, asset_year, asset_make, asset_model,
          asset_vin, asset_license_plate, inspection_type, status, started_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'${type}','in_progress',NOW())
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'${type}','in_progress',NOW())
     `).run(
       id, u.id, u.name,
-      u.truck_model  || 'N/A',
-      u.truck_number || '',
+      truck ? truck.id           : null,
+      truck ? truck.truck_number : 'N/A',
+      truck ? truck.truck_model  : 'N/A',
       assetData.asset_id            || null,
       assetData.asset_number        || null,
       assetData.asset_year          || null,
@@ -78,7 +84,7 @@ router.post('/api/inspections/start', driver, async (req, res) => {
       assetData.asset_license_plate || null,
     );
 
-    res.json({ inspectionId: id, asset: assetData });
+    res.json({ inspectionId: id, truck, asset: assetData });
   } catch (e) {
     console.error('Start inspection error:', e.message);
     res.status(500).json({ error: 'Server error' });

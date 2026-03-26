@@ -1,388 +1,732 @@
-// routes/agent.js — Dispatcher / Agent dashboard routes
+// Kurtex - Agent/Dispatcher Application
+// Designed by Rekka Software
 
-const express  = require('express');
-const path     = require('path');
-const fs       = require('fs');
-const archiver = require('archiver');
-const db       = require('../database');
-const { agent } = require('../middleware/auth');
+const TL = { pickup: 'PickUp Trailer', drop: 'Drop Trailer', general: 'General' };
 
-const router = express.Router();
+const G = {
+  drivers: [], sel: null, isAdmin: false,
+  lbPhotos: [], lbIdx: 0,
+  feedFilter: 'all', feedRows: [],
+  usersMap: {}
+};
 
-// ── Assets (readable by any logged-in user) ───────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
 
-router.get('/api/assets', (req, res, next) => {
-  if (!req.session.user) return res.redirect('/login');
-  next();
-}, async (req, res) => {
+async function init() {
   try {
-    const rows = await db
-      .prepare('SELECT * FROM assets WHERE active=1 ORDER BY asset_number')
-      .all();
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+    const r = await fetch('/api/me');
+    if (!r.ok) { location.href = '/login'; return; }
+    const u = await r.json();
+    if (u.role === 'driver') { location.href = '/driver/inspect'; return; }
 
-// Asset detail with full inspection history
-router.get('/api/assets/:id', agent, async (req, res) => {
-  try {
-    const asset = await db.prepare('SELECT * FROM assets WHERE id=?').get(req.params.id);
-    if (!asset) return res.status(404).json({ error: 'Not found' });
+    G.isAdmin = u.role === 'superadmin';
+    document.getElementById('agentName').textContent = u.name || u.username;
+    document.getElementById('roleBadge').textContent = G.isAdmin ? 'Admin' : 'Dispatcher';
 
-    const inspections = await db.prepare(`
-      SELECT i.*, COUNT(p.id) as photo_count,
-             SUM(CASE WHEN p.flagged=1 THEN 1 ELSE 0 END) as flagged_count
-      FROM inspections i
-      LEFT JOIN inspection_photos p ON p.inspection_id = i.id
-      WHERE i.asset_id = ? AND i.status = 'submitted'
-      GROUP BY i.id
-      ORDER BY i.submitted_at DESC
-    `).all(req.params.id);
-
-    res.json({ ...asset, inspections });
-  } catch (e) {
-    console.error('Asset detail error:', e.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ── Drivers & inspections ─────────────────────────────────────────────────────
-
-router.get('/api/agent/drivers', agent, async (req, res) => {
-  try {
-    const rows = await db.prepare(`
-      SELECT u.id, u.full_name, u.username, u.email, u.active,
-             t.truck_number, t.truck_model, t.id as truck_id,
-             COUNT(i.id) as total_inspections,
-             MAX(i.submitted_at) as last_inspection,
-             SUM(CASE WHEN i.status='submitted' THEN 1 ELSE 0 END) as submitted_count
-      FROM users u
-      LEFT JOIN trucks t ON t.driver_id = u.id AND t.active = 1
-      LEFT JOIN inspections i ON i.driver_id = u.id
-      WHERE u.role = 'driver'
-      GROUP BY u.id, t.truck_number, t.truck_model, t.id
-      ORDER BY u.full_name
-    `).all();
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.get('/api/agent/drivers/:id/inspections', agent, async (req, res) => {
-  try {
-    const rows = await db.prepare(`
-      SELECT i.*, COUNT(p.id) as photo_count
-      FROM inspections i
-      LEFT JOIN inspection_photos p ON p.inspection_id = i.id
-      WHERE i.driver_id = ? AND i.status = 'submitted'
-      GROUP BY i.id
-      ORDER BY i.submitted_at DESC
-    `).all(req.params.id);
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.get('/api/agent/inspections', agent, async (req, res) => {
-  try {
-    const rows = await db.prepare(`
-      SELECT i.*, COUNT(p.id) as photo_count
-      FROM inspections i
-      LEFT JOIN inspection_photos p ON p.inspection_id = i.id
-      WHERE i.status = 'submitted'
-      GROUP BY i.id
-      ORDER BY i.submitted_at DESC
-      LIMIT 100
-    `).all();
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.get('/api/agent/inspections/:id', agent, async (req, res) => {
-  try {
-    const insp = await db.prepare('SELECT * FROM inspections WHERE id=?').get(req.params.id);
-    if (!insp) return res.status(404).json({ error: 'Not found' });
-    const photos = await db
-      .prepare('SELECT * FROM inspection_photos WHERE inspection_id=? ORDER BY step_number')
-      .all(req.params.id);
-    res.json({ ...insp, photos });
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ── Flag / unflag photo ───────────────────────────────────────────────────────
-
-router.patch('/api/agent/photos/:photoId/flag', agent, async (req, res) => {
-  try {
-    const { flagged, flag_note } = req.body;
-    await db
-      .prepare('UPDATE inspection_photos SET flagged=?, flag_note=? WHERE id=?')
-      .run(flagged ? 1 : 0, flag_note || '', req.params.photoId);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ── Download ZIP ──────────────────────────────────────────────────────────────
-
-router.get('/api/agent/inspections/:id/download', agent, async (req, res) => {
-  try {
-    const insp = await db.prepare('SELECT * FROM inspections WHERE id=?').get(req.params.id);
-    if (!insp) return res.status(404).json({ error: 'Not found' });
-
-    const photos = await db
-      .prepare('SELECT * FROM inspection_photos WHERE inspection_id=? ORDER BY step_number')
-      .all(req.params.id);
-
-    const uploadsDir = req.app.locals.uploadsDir;
-    const driverSlug = (insp.driver_name || '').replace(/[^a-z0-9]/gi, '_');
-    const dateSlug   = (insp.submitted_at || '').toString().split('T')[0];
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="inspection_${driverSlug}_${dateSlug}.zip"`);
-
-    const arc = archiver('zip');
-    arc.pipe(res);
-
-    photos.forEach(p => {
-      const fp = path.join(uploadsDir,
-        path.basename(path.dirname(p.file_path)),
-        path.basename(p.file_path));
-      if (fs.existsSync(fp)) {
-        arc.file(fp, { name: `step_${p.step_number}_${p.step_label || ''}${path.extname(p.file_path)}` });
-      }
-    });
-
-    arc.finalize();
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ── PDF Report — Whip Around inspired ────────────────────────────────────────
-
-router.get('/api/agent/inspections/:id/report', agent, async (req, res) => {
-  try {
-    const insp = await db.prepare('SELECT * FROM inspections WHERE id=?').get(req.params.id);
-    if (!insp) return res.status(404).json({ error: 'Not found' });
-
-    const photos = await db
-      .prepare('SELECT * FROM inspection_photos WHERE inspection_id=? ORDER BY step_number')
-      .all(req.params.id);
-
-    const TL        = { pickup: 'PickUp Trailer Pictures', drop: 'Drop Trailer', general: 'General' };
-    const inspType  = TL[insp.inspection_type] || insp.inspection_type || 'PickUp Trailer Pictures';
-    const inspNum   = insp.id.replace(/-/g, '').substring(0, 8).toUpperCase();
-    const submittedDate = insp.submitted_at
-      ? new Date(insp.submitted_at).toLocaleString('en-US', {
-          weekday: 'short', year: 'numeric', month: 'short',
-          day: 'numeric', hour: '2-digit', minute: '2-digit',
-        })
-      : 'N/A';
-
-    const flaggedCount = photos.filter(p => p.flagged).length;
-
-    let duration = 'n/a';
-    if (insp.started_at && insp.submitted_at) {
-      const ms   = new Date(insp.submitted_at) - new Date(insp.started_at);
-      const mins = Math.floor(ms / 60000);
-      const secs = Math.floor((ms % 60000) / 1000);
-      duration   = `${mins}m ${secs}s`;
+    if (G.isAdmin) {
+      document.getElementById('navAdmin').style.display = 'flex';
+      document.getElementById('adminSep').style.display = 'block';
+      const mNavAdmin = document.getElementById('mNavAdmin');
+      if (mNavAdmin) mNavAdmin.style.display = 'flex';
     }
 
-    // Group photos by step
-    const byStep = {};
-    photos.forEach(p => {
-      if (!byStep[p.step_number]) {
-        byStep[p.step_number] = { label: p.step_label || `Step ${p.step_number}`, photos: [] };
-      }
-      byStep[p.step_number].photos.push(p);
-    });
+    const mobileNav = document.getElementById('mobileNav');
+    if (mobileNav) mobileNav.style.display = '';
 
-    // Build per-step photo HTML
-    const photoSections = Object.entries(byStep).map(([stepNum, step]) => {
-      const photoHtml = step.photos.map(p => {
-        const fullUrl  = `${req.protocol}://${req.get('host')}${p.file_path}`;
-        const flagBadge = p.flagged
-          ? `<div class="flag-badge">⚑ FLAGGED${p.flag_note ? ': ' + p.flag_note : ''}</div>`
-          : '';
-        return `<div class="photo-item">
-          <img src="${fullUrl}" onerror="this.style.display='none'" alt="Step ${stepNum} photo">
-          ${flagBadge}
-        </div>`;
-      }).join('');
+    loadStats();
+    loadDrivers();
+  } catch (e) { location.href = '/login'; }
+}
 
-      return `<div class="step-section">
-        <div class="step-header">
-          <div class="step-num-badge">${stepNum}</div>
-          <div class="step-title-text">${step.label}</div>
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const d = await (await fetch('/api/agent/stats')).json();
+    document.getElementById('sD').textContent = d.totalDrivers;
+    document.getElementById('sDi').textContent = d.totalDispatchers || '—';
+    document.getElementById('sT').textContent = d.totalInspections;
+    document.getElementById('sTd').textContent = d.todayInspections;
+    document.getElementById('sP').textContent = d.totalPhotos;
+  } catch (e) {}
+}
+
+// ── Drivers list ──────────────────────────────────────────────────────────────
+async function loadDrivers() {
+  try {
+    G.drivers = await (await fetch('/api/agent/drivers')).json();
+    document.getElementById('dCount').textContent = G.drivers.filter(d => d.active).length;
+    renderDrivers(G.drivers);
+  } catch (e) {}
+}
+
+function renderDrivers(list) {
+  const el = document.getElementById('driversList');
+  if (!list.length) { el.innerHTML = '<div style="padding:16px;font-size:15px;color:var(--dim);font-weight:600">No drivers</div>'; return; }
+  el.innerHTML = list.map(d => {
+    const av = (d.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="driver-row${G.sel?.id===d.id?' sel':''}" onclick="selectDriver(${d.id})" data-id="${d.id}">
+      <div class="dr-av">${av}</div>
+      <div class="dr-info">
+        <div class="dr-name">${esc(d.full_name)}</div>
+        <div class="dr-sub">${esc(d.truck_model||'No truck')}${d.truck_number?' · '+esc(d.truck_number):''}</div>
+      </div>
+      <div class="dr-cnt">${d.submitted_count||0}</div>
+    </div>`;
+  }).join('');
+  if (window.applyIcons) applyIcons();
+}
+
+function filterDrivers() {
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  renderDrivers(G.drivers.filter(d =>
+    (d.full_name||'').toLowerCase().includes(q) ||
+    (d.truck_model||'').toLowerCase().includes(q) ||
+    (d.truck_number||'').toLowerCase().includes(q)
+  ));
+}
+
+async function selectDriver(id) {
+  const d = G.drivers.find(x => x.id === id);
+  if (!d) return;
+  G.sel = d;
+  document.querySelectorAll('.driver-row').forEach(el => el.classList.toggle('sel', parseInt(el.dataset.id) === id));
+  document.getElementById('detailEmpty').style.display = 'none';
+  const content = document.getElementById('detailContent');
+  content.style.display = 'flex';
+  document.getElementById('detailName').textContent = d.full_name;
+  document.getElementById('detailSub').innerHTML = `<span>${esc(d.truck_model||'No truck')}${d.truck_number?' · '+esc(d.truck_number):''}</span><span>${d.submitted_count||0} inspection${d.submitted_count!==1?'s':''}</span>`;
+
+  if (window.innerWidth <= 768) {
+    document.querySelector('.drivers-col').style.display = 'none';
+    document.querySelector('.detail-col').style.display = 'flex';
+    document.getElementById('backToDriversBtn').style.display = 'flex';
+    document.getElementById('inspList').scrollTop = 0;
+  }
+
+  const list = document.getElementById('inspList');
+  list.innerHTML = '<div style="padding:14px;font-size:15px;color:var(--dim);font-weight:600">Loading…</div>';
+
+  try {
+    const insps = await (await fetch(`/api/agent/drivers/${id}/inspections`)).json();
+    if (!insps.length) { list.innerHTML = '<div style="padding:14px;font-size:15px;color:var(--dim);font-weight:600">No inspections yet.</div>'; return; }
+    list.innerHTML = insps.map(i => {
+      const tk = i.inspection_type || 'pickup';
+      return `<div class="insp-card">
+        <div class="insp-card-hd" onclick="toggleCard('${i.id}')">
+          <div>
+            <div class="insp-card-date"><span class="type-badge ${tk}">${TL[tk]||tk}</span>${fmtDate(i.submitted_at)}</div>
+            <div class="insp-card-sub">${i.photo_count} photos${i.asset_number?' · '+esc(i.asset_number):''}${i.latitude?' · GPS':''}</div>
+          </div>
+          <div class="insp-card-r">
+            <div class="pill-ok">Submitted</div>
+            <span class="material-icons-round chev" id="chev-${i.id}" style="font-size:20px;color:var(--muted);transition:transform 0.2s">expand_more</span>
+          </div>
         </div>
-        <div class="step-body">
-          <div class="photo-grid">${photoHtml}</div>
+        <div class="insp-card-body" id="body-${i.id}">
+          <div id="cnt-${i.id}"><div style="font-size:14px;color:var(--dim);font-weight:600">Loading…</div></div>
         </div>
       </div>`;
     }).join('');
+  if (window.applyIcons) applyIcons();
+  } catch (e) { list.innerHTML = '<div style="font-size:15px;color:var(--red);font-weight:700">Error loading.</div>'; }
+}
 
-    const statusColor  = flaggedCount > 0 ? '#d94040' : '#1a8f4e';
-    const statusBg     = flaggedCount > 0 ? '#fef2f2' : '#f0fdf4';
-    const statusBorder = flaggedCount > 0 ? '#fca5a5' : '#bbf7d0';
-    const statusText   = flaggedCount > 0
-      ? `⚑ ${flaggedCount} ITEM${flaggedCount > 1 ? 'S' : ''} FLAGGED`
-      : '✓ PASSED';
+async function toggleCard(id) {
+  const body = document.getElementById(`body-${id}`), chev = document.getElementById(`chev-${id}`);
+  if (body.classList.contains('open')) { body.classList.remove('open'); chev.classList.remove('open'); return; }
+  body.classList.add('open'); chev.classList.add('open');
+  const c = document.getElementById(`cnt-${id}`);
+  if (c.dataset.loaded) return;
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Inspection Report #${inspNum}</title>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1c1410; background: #fff; }
-  @media print {
-    .no-print { display: none !important; }
-    @page { margin: 12mm 14mm; size: A4; }
-    body { font-size: 12px; }
-  }
-  .no-print { position: fixed; bottom: 20px; right: 20px; background: #1e4da1; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 16px rgba(30,77,161,0.35); z-index: 100; display: flex; align-items: center; gap: 8px; }
-  .no-print:hover { background: #163d85; }
-  .top-stripe { height: 6px; background: linear-gradient(90deg, #1e4da1 0%, #7c4a1e 100%); }
-  .page-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px 14px; border-bottom: 2px solid #e5dfd6; }
-  .brand-name { font-size: 24px; font-weight: 900; color: #1e4da1; letter-spacing: -0.5px; }
-  .brand-sub { font-size: 11px; color: #a8977f; font-weight: 500; margin-top: 2px; }
-  .report-label { text-align: right; }
-  .report-label h1 { font-size: 20px; font-weight: 900; color: #1c1410; letter-spacing: -0.3px; }
-  .report-id { font-size: 12px; color: #6b5c4e; font-weight: 600; margin-top: 3px; }
-  .status-banner { margin: 14px 24px; background: ${statusBg}; border: 1.5px solid ${statusBorder}; border-radius: 12px; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-  .status-badge { font-size: 14px; font-weight: 900; color: ${statusColor}; letter-spacing: -0.2px; }
-  .status-meta { display: flex; gap: 20px; flex-wrap: wrap; }
-  .status-meta span { font-size: 12px; color: #6b5c4e; }
-  .status-meta strong { color: #1c1410; font-weight: 700; }
-  .info-section { padding: 0 24px 14px; }
-  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1.5px solid #e5dfd6; border-radius: 12px; overflow: hidden; }
-  .info-cell { padding: 11px 14px; border-right: 1px solid #e5dfd6; border-bottom: 1px solid #e5dfd6; }
-  .info-cell:nth-child(3n) { border-right: none; }
-  .info-cell:nth-last-child(-n+3) { border-bottom: none; }
-  .info-cell.full { grid-column: 1 / -1; }
-  .info-lbl { font-size: 10px; font-weight: 700; color: #a8977f; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px; }
-  .info-val { font-size: 13px; font-weight: 800; color: #1c1410; }
-  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; padding: 0 24px 14px; }
-  .stat-box { background: #faf8f5; border: 1.5px solid #e5dfd6; border-radius: 10px; padding: 11px 13px; }
-  .stat-num { font-size: 22px; font-weight: 900; color: #1c1410; line-height: 1; }
-  .stat-num.flagged { color: #d94040; }
-  .stat-lbl { font-size: 10px; color: #6b5c4e; font-weight: 600; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.4px; }
-  .photos-title { font-size: 16px; font-weight: 900; color: #1c1410; padding: 6px 24px 12px; border-top: 1.5px solid #e5dfd6; margin-top: 6px; letter-spacing: -0.3px; }
-  .step-section { margin: 0 24px 16px; break-inside: avoid; }
-  .step-header { background: #1e4da1; border-radius: 10px 10px 0 0; padding: 9px 14px; display: flex; align-items: center; gap: 10px; }
-  .step-num-badge { width: 26px; height: 26px; background: rgba(255,255,255,0.2); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; color: #fff; flex-shrink: 0; }
-  .step-title-text { font-size: 13px; font-weight: 800; color: #fff; }
-  .step-body { border: 1.5px solid #e5dfd6; border-top: none; border-radius: 0 0 10px 10px; padding: 12px; }
-  .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .photo-item { break-inside: avoid; }
-  .photo-item img { width: 100%; height: auto; max-height: 180px; object-fit: cover; border-radius: 8px; border: 1px solid #e5dfd6; display: block; }
-  .flag-badge { background: #fef2f2; border: 1px solid #fca5a5; color: #d94040; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; }
-  .sig-section { padding: 0 24px; margin-top: 12px; }
-  .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .sig-box { border: 1.5px solid #e5dfd6; border-radius: 10px; padding: 13px; }
-  .sig-lbl { font-size: 10px; color: #a8977f; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 36px; }
-  .sig-line { border-top: 1px solid #d4ccc0; padding-top: 5px; font-size: 11px; color: #a8977f; }
-  .condition-bar { margin: 14px 24px 0; padding: 11px 16px; background: ${statusBg}; border: 1.5px solid ${statusBorder}; border-radius: 10px; font-size: 13px; font-weight: 700; color: ${statusColor}; }
-  .page-footer { text-align: center; padding: 14px 24px 20px; font-size: 10px; color: #a8977f; margin-top: 14px; border-top: 1px solid #e5dfd6; }
-</style>
-</head>
-<body>
-<button class="no-print" onclick="window.print()">🖨 Print / Save PDF</button>
-<div class="top-stripe"></div>
-<div class="page-header">
-  <div>
-    <div class="brand-name">Kurtex</div>
-    <div class="brand-sub">Fleet Inspection System · by Rekka Software</div>
-  </div>
-  <div class="report-label">
-    <h1>Inspection Report</h1>
-    <div class="report-id">#${inspNum} · ${inspType}</div>
-  </div>
-</div>
-<div class="status-banner">
-  <div class="status-badge">${statusText}</div>
-  <div class="status-meta">
-    <span>Date: <strong>${submittedDate}</strong></span>
-    <span>Duration: <strong>${duration}</strong></span>
-    <span>Driver: <strong>${insp.driver_name || 'N/A'}</strong></span>
-  </div>
-</div>
-<div class="info-section">
-  <div class="info-grid">
-    <div class="info-cell"><div class="info-lbl">Form Type</div><div class="info-val">${inspType}</div></div>
-    <div class="info-cell"><div class="info-lbl">Inspection Date</div><div class="info-val">${submittedDate}</div></div>
-    <div class="info-cell"><div class="info-lbl">Duration</div><div class="info-val">${duration}</div></div>
-    <div class="info-cell"><div class="info-lbl">Inspected By</div><div class="info-val">${insp.driver_name || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">Truck #</div><div class="info-val">${insp.truck_number || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">Truck Model</div><div class="info-val">${insp.truck_model || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">Asset / Trailer</div><div class="info-val">${insp.asset_number || insp.truck_number || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">Make &amp; Model</div><div class="info-val">${[insp.asset_make, insp.asset_model].filter(Boolean).join(' ') || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">Year</div><div class="info-val">${insp.asset_year || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">VIN</div><div class="info-val">${insp.asset_vin || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">License Plate</div><div class="info-val">${insp.asset_license_plate || 'N/A'}</div></div>
-    <div class="info-cell"><div class="info-lbl">GPS Location</div><div class="info-val">${insp.latitude ? `${parseFloat(insp.latitude).toFixed(5)}, ${parseFloat(insp.longitude).toFixed(5)}` : 'N/A'}</div></div>
-    ${insp.notes ? `<div class="info-cell full"><div class="info-lbl">Notes</div><div class="info-val" style="font-weight:600;color:#6b5c4e;">${insp.notes}</div></div>` : ''}
-  </div>
-</div>
-<div class="stats-row">
-  <div class="stat-box"><div class="stat-num${flaggedCount > 0 ? ' flagged' : ''}">${flaggedCount}</div><div class="stat-lbl">Flagged Items</div></div>
-  <div class="stat-box"><div class="stat-num">${photos.length}</div><div class="stat-lbl">Total Photos</div></div>
-  <div class="stat-box"><div class="stat-num">${Object.keys(byStep).length}</div><div class="stat-lbl">Steps Done</div></div>
-  <div class="stat-box"><div class="stat-num">${insp.truck_number || '—'}</div><div class="stat-lbl">Truck No.</div></div>
-</div>
-<div class="photos-title">📷 Inspection Photos</div>
-${photoSections}
-<div class="sig-section">
-  <div class="sig-grid">
-    <div class="sig-box"><div class="sig-lbl">Reporting Operator's Signature</div><div class="sig-line">Signed: ${insp.driver_name || 'N/A'}</div></div>
-    <div class="sig-box"><div class="sig-lbl">Reviewing Operator's Signature</div><div class="sig-line">Pending review</div></div>
-  </div>
-</div>
-<div class="condition-bar">Condition of the above asset is: <strong>${flaggedCount > 0 ? 'Requires Attention' : 'Satisfactory'}</strong></div>
-<div class="page-footer">Generated by Kurtex Fleet Inspection System &nbsp;·&nbsp; Rekka Software &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-</body>
-</html>`;
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
-  } catch (e) {
-    console.error('PDF report error:', e.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ── Stats ─────────────────────────────────────────────────────────────────────
-
-router.get('/api/agent/stats', agent, async (req, res) => {
   try {
-    const totalDrivers     = await db.prepare("SELECT COUNT(*) as c FROM users WHERE role='driver' AND active=1").get();
-    const totalDispatchers = await db.prepare("SELECT COUNT(*) as c FROM users WHERE role='agent' AND active=1").get();
-    const totalInspections = await db.prepare("SELECT COUNT(*) as c FROM inspections WHERE status='submitted'").get();
-    const todayInspections = await db.prepare("SELECT COUNT(*) as c FROM inspections WHERE status='submitted' AND DATE(submitted_at)=CURRENT_DATE").get();
-    const totalPhotos      = await db.prepare("SELECT COUNT(*) as c FROM inspection_photos").get();
+    const insp = await (await fetch(`/api/agent/inspections/${id}`)).json();
+    c.dataset.loaded = '1';
+    const photos = insp.photos || [];
+    const mapUrl = insp.latitude ? `https://www.google.com/maps?q=${insp.latitude},${insp.longitude}` : null;
 
-    res.json({
-      totalDrivers:     parseInt(totalDrivers?.c     || 0),
-      totalDispatchers: parseInt(totalDispatchers?.c  || 0),
-      totalInspections: parseInt(totalInspections?.c  || 0),
-      todayInspections: parseInt(todayInspections?.c  || 0),
-      totalPhotos:      parseInt(totalPhotos?.c       || 0),
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'Server error' });
+    window._lbPhotos = window._lbPhotos || {};
+    window._lbPhotos[id] = photos;
+
+    c.innerHTML = `
+      ${photos.length ? `<div class="photo-grid">${photos.map((p,i) =>
+        `<div class="photo-cell${p.flagged?' flagged':''}" onclick="openLb('${id}',${i})">
+          <img src="${esc(p.file_path)}" loading="lazy">
+          <div class="photo-cell-lbl">${esc(p.step_label||'Step '+p.step_number)}</div>
+          <div class="photo-cell-num">${p.step_number}</div>
+          ${p.flagged?'<div class="photo-flag-badge"><span class="material-icons-round" style="font-size:11px">flag</span></div>':''}
+        </div>`).join('')}</div>` : '<div style="font-size:14px;color:var(--dim);margin-bottom:14px;font-weight:600">No photos</div>'}
+      <div class="drows">
+        <div class="drow"><span class="k">Driver</span><span class="v">${esc(insp.driver_name)}</span></div>
+        <div class="drow"><span class="k">Type</span><span class="v">${esc(TL[insp.inspection_type]||insp.inspection_type||'PickUp')}</span></div>
+        <div class="drow"><span class="k">Asset / Trailer</span><span class="v">${insp.asset_id
+          ? `<span class="asset-link" onclick="openAssetPanel(${insp.asset_id})">${esc(insp.asset_number||'—')}${insp.asset_make?' ('+[insp.asset_make,insp.asset_model].filter(Boolean).join(' ')+')':''}</span>`
+          : esc(insp.asset_number||'—')
+        }</span></div>
+        <div class="drow"><span class="k">Truck</span><span class="v">${esc(insp.truck_model||'—')}</span></div>
+        ${insp.truck_number?`<div class="drow"><span class="k">Truck No.</span><span class="v">${esc(insp.truck_number)}</span></div>`:''}
+        <div class="drow"><span class="k">Submitted</span><span class="v">${fmtDate(insp.submitted_at)}</span></div>
+        <div class="drow"><span class="k">GPS</span><span class="v">${mapUrl?`<a href="${mapUrl}" target="_blank">View Maps</a>`:'Not recorded'}</span></div>
+      </div>
+      ${insp.notes?`<div class="notes-box"><span class="material-icons-round" style="font-size:14px;vertical-align:-2px;margin-right:4px">notes</span>${esc(insp.notes)}</div>`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <a class="btn-dl" href="/api/agent/inspections/${id}/download" download>
+          <span class="material-icons-round" style="font-size:16px">download</span> ZIP
+        </a>
+        <a class="btn-dl btn-pdf" href="/api/agent/inspections/${id}/report" target="_blank">
+          <span class="material-icons-round" style="font-size:16px">picture_as_pdf</span> PDF Report
+        </a>
+      </div>`;
+  } catch (e) { c.innerHTML = '<div style="font-size:14px;color:var(--red);font-weight:700">Error loading.</div>'; }
+}
+
+// ── Lightbox with flagging ────────────────────────────────────────────────────
+function openLb(id, idx) {
+  const p = (window._lbPhotos && window._lbPhotos[id]) || [];
+  if (!p.length) return;
+  G.lbPhotos = p; G.lbIdx = idx;
+  showLbPhoto();
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function openLbArr(key, idx) {
+  const arr = window._lbPhotos && window._lbPhotos[key];
+  if (!arr || !arr.length) return;
+  G.lbPhotos = arr; G.lbIdx = idx;
+  showLbPhoto();
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function showLbPhoto() {
+  const p = G.lbPhotos[G.lbIdx];
+  if (!p) return;
+  document.getElementById('lbImg').src = p.file_path;
+  document.getElementById('lbMeta').textContent = `Step ${p.step_number}${p.step_label?' — '+p.step_label:''} | ${G.lbIdx+1} of ${G.lbPhotos.length}`;
+
+  const flagBtn = document.getElementById('lbFlagBtn');
+  if (flagBtn) {
+    if (p.flagged) {
+      flagBtn.textContent = 'Remove Flag';
+      flagBtn.classList.add('flagged');
+    } else {
+      flagBtn.textContent = 'Flag Photo';
+      flagBtn.classList.remove('flagged');
+    }
+    flagBtn.dataset.photoId = p.id;
+    flagBtn.dataset.flagged = p.flagged ? '1' : '0';
+    flagBtn.dataset.note = p.flag_note || '';
   }
+}
+
+async function toggleFlag() {
+  const btn = document.getElementById('lbFlagBtn');
+  const photoId = btn.dataset.photoId;
+  const currentlyFlagged = btn.dataset.flagged === '1';
+
+  if (!currentlyFlagged) {
+    // Ask for note
+    const note = prompt('Add a note for this flag (optional):') ?? '';
+    if (note === null) return; // cancelled
+    await fetch(`/api/agent/photos/${photoId}/flag`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagged: true, flag_note: note })
+    });
+    G.lbPhotos[G.lbIdx].flagged = 1;
+    G.lbPhotos[G.lbIdx].flag_note = note;
+  } else {
+    if (!confirm('Remove flag from this photo?')) return;
+    await fetch(`/api/agent/photos/${photoId}/flag`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagged: false, flag_note: '' })
+    });
+    G.lbPhotos[G.lbIdx].flagged = 0;
+    G.lbPhotos[G.lbIdx].flag_note = '';
+  }
+  showLbPhoto();
+  // Refresh the card
+  const cards = document.querySelectorAll('[id^="cnt-"]');
+  cards.forEach(c => { delete c.dataset.loaded; });
+}
+
+function lbNav(d) {
+  const n = G.lbIdx + d;
+  if (n < 0 || n >= G.lbPhotos.length) return;
+  G.lbIdx = n; showLbPhoto();
+}
+
+function closeLb() { document.getElementById('lightbox').classList.remove('open'); }
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  if (e.key === 'ArrowLeft') lbNav(-1);
+  if (e.key === 'ArrowRight') lbNav(1);
+  if (e.key === 'Escape') closeLb();
 });
 
-module.exports = router;
+// ── Asset Detail Panel ────────────────────────────────────────────────────────
+async function openAssetPanel(id) {
+  const panel = document.getElementById('assetPanel');
+  panel.classList.remove('closed');
+  document.getElementById('apTitle').textContent = 'Loading…';
+  document.getElementById('apSub').textContent = '';
+  document.getElementById('apBody').innerHTML = '<div style="padding:20px;font-size:15px;color:var(--dim);font-weight:600">Loading…</div>';
+
+  try {
+    const asset = await (await fetch(`/api/assets/${id}`)).json();
+    const inspections = asset.inspections || [];
+
+    document.getElementById('apTitle').textContent = asset.asset_number;
+    document.getElementById('apSub').textContent = [asset.year, asset.make, asset.model].filter(Boolean).join(' ') || 'No details';
+
+    const totalPhotos  = inspections.reduce((s, i) => s + parseInt(i.photo_count || 0), 0);
+    const totalFlagged = inspections.reduce((s, i) => s + parseInt(i.flagged_count || 0), 0);
+    const lastInsp     = inspections[0];
+
+    document.getElementById('apBody').innerHTML = `
+      <!-- Asset info card -->
+      <div class="ap-info-card">
+        <div class="ap-info-row"><span class="k">Asset #</span><span class="v">${esc(asset.asset_number)}</span></div>
+        <div class="ap-info-row"><span class="k">Year</span><span class="v">${esc(asset.year || '—')}</span></div>
+        <div class="ap-info-row"><span class="k">Make</span><span class="v">${esc(asset.make || '—')}</span></div>
+        <div class="ap-info-row"><span class="k">Model</span><span class="v">${esc(asset.model || '—')}</span></div>
+        <div class="ap-info-row"><span class="k">VIN</span><span class="v" style="font-family:monospace;font-size:12px">${esc(asset.vin || '—')}</span></div>
+        <div class="ap-info-row"><span class="k">License Plate</span><span class="v">${esc(asset.license_plate || '—')}</span></div>
+        ${asset.notes ? `<div class="ap-info-row"><span class="k">Notes</span><span class="v">${esc(asset.notes)}</span></div>` : ''}
+      </div>
+
+      <!-- Stats row -->
+      <div class="ap-stats">
+        <div class="ap-stat"><div class="ap-stat-num">${inspections.length}</div><div class="ap-stat-lbl">Inspections</div></div>
+        <div class="ap-stat"><div class="ap-stat-num">${totalPhotos}</div><div class="ap-stat-lbl">Total Photos</div></div>
+        <div class="ap-stat ${totalFlagged > 0 ? 'flagged' : ''}"><div class="ap-stat-num">${totalFlagged}</div><div class="ap-stat-lbl">Flagged</div></div>
+        <div class="ap-stat"><div class="ap-stat-num">${lastInsp ? fmtDateShort(lastInsp.submitted_at) : '—'}</div><div class="ap-stat-lbl">Last Inspection</div></div>
+      </div>
+
+      <!-- Inspection history -->
+      <div class="ap-section-hd">Inspection History</div>
+      ${!inspections.length
+        ? '<div style="padding:16px;font-size:15px;color:var(--dim);font-weight:600;text-align:center">No inspections recorded for this asset yet.</div>'
+        : inspections.map(i => {
+            const tk = i.inspection_type || 'pickup';
+            const flagBadge = parseInt(i.flagged_count) > 0
+              ? `<span class="ap-flag-badge"><span class="material-icons-round" style="font-size:11px">flag</span> ${i.flagged_count}</span>`
+              : '';
+            return `<div class="ap-insp-row" onclick="openHistPanel('${i.id}')">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+                  <span class="type-badge ${tk}">${TL[tk] || tk}</span>
+                  ${flagBadge}
+                </div>
+                <div style="font-size:13px;font-weight:700;color:var(--text)">${fmtDate(i.submitted_at)}</div>
+                <div style="font-size:12px;color:var(--dim);margin-top:2px">
+                  ${esc(i.driver_name)} · ${i.photo_count} photo${i.photo_count != 1 ? 's' : ''}
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+                <a class="btn-dl btn-pdf" href="/api/agent/inspections/${i.id}/report" target="_blank" onclick="event.stopPropagation()" style="font-size:12px;padding:5px 10px">
+                  <span class="material-icons-round" style="font-size:13px">picture_as_pdf</span> PDF
+                </a>
+              </div>
+            </div>`;
+          }).join('')
+      }`;
+  if (window.applyIcons) applyIcons();
+  } catch (e) {
+    document.getElementById('apBody').innerHTML = '<div style="padding:20px;font-size:15px;color:var(--red);font-weight:700">Error loading asset.</div>';
+  }
+}
+
+function closeAssetPanel() { document.getElementById('assetPanel').classList.add('closed'); }
+
+function fmtDateShort(dt) {
+  if (!dt) return '—';
+  const d = new Date(dt.includes('T') ? dt : dt + 'Z');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+}
+
+// ── History / Feed ────────────────────────────────────────────────────────────
+async function loadFeed() {
+  try {
+    G.feedRows = await (await fetch('/api/agent/inspections')).json();
+    renderFeed();
+  } catch (e) {
+    document.getElementById('feedBody').innerHTML = '<tr><td colspan="7" style="padding:20px;font-size:15px;color:var(--red);font-weight:700">Error loading.</td></tr>';
+  }
+}
+
+function setFilter(f) {
+  G.feedFilter = f;
+  ['All','Pickup','Drop','General'].forEach(t => {
+    document.getElementById('f'+t).classList.toggle('active', t.toLowerCase()===f||(f==='all'&&t==='All'));
+  });
+  renderFeed();
+}
+
+function renderFeed() {
+  const tbody = document.getElementById('feedBody');
+  let rows = G.feedRows;
+  if (G.feedFilter !== 'all') rows = rows.filter(r => (r.inspection_type||'pickup') === G.feedFilter);
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;font-size:15px;color:var(--dim);font-weight:600">No inspections found.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(i => {
+    const tk = i.inspection_type || 'pickup';
+    return `<tr onclick="openHistPanel('${i.id}')">
+      <td><span class="insp-id">#${i.id.slice(0,8).toUpperCase()}</span></td>
+      <td><span class="pill-ok" style="font-size:12px;padding:5px 12px">Submitted</span></td>
+      <td style="color:var(--dim);font-size:14px">${fmtDate(i.submitted_at)}</td>
+      <td>${i.asset_number
+        ? `<span class="asset-val asset-link" onclick="event.stopPropagation();openAssetPanel(${i.asset_id||0})" title="View asset details">${esc(i.asset_number)}</span>`
+        : i.truck_number
+          ? `<span class="asset-val">${esc(i.truck_number)}</span>`
+          : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-weight:800">${esc(i.driver_name)}</td>
+      <td><span class="type-badge ${tk}">${TL[tk]||tk}</span></td>
+      <td onclick="event.stopPropagation()">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="action-btn" onclick="openHistPanel('${i.id}')">
+            <span class="material-icons-round" style="font-size:14px;vertical-align:-3px">search</span> View
+          </button>
+          <a class="action-btn" href="/api/agent/inspections/${i.id}/report" target="_blank" style="text-decoration:none">
+            <span class="material-icons-round" style="font-size:14px;vertical-align:-3px">picture_as_pdf</span> PDF
+          </a>
+          <a class="action-btn" href="/api/agent/inspections/${i.id}/download" download style="text-decoration:none">
+            <span class="material-icons-round" style="font-size:14px;vertical-align:-3px">download</span> ZIP
+          </a>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  if (window.applyIcons) applyIcons();
+}
+
+async function openHistPanel(id) {
+  const panel = document.getElementById('histPanel');
+  panel.classList.remove('closed');
+  document.getElementById('hpTitle').textContent = '#'+id.slice(0,8).toUpperCase();
+  document.getElementById('hpBody').innerHTML = '<div style="font-size:15px;color:var(--dim);font-weight:600;padding:8px">Loading…</div>';
+
+  try {
+    const insp = await (await fetch(`/api/agent/inspections/${id}`)).json();
+    const photos = insp.photos || [];
+    const tk = insp.inspection_type || 'pickup';
+    const mapUrl = insp.latitude ? `https://www.google.com/maps?q=${insp.latitude},${insp.longitude}` : null;
+
+    window._lbPhotos = window._lbPhotos || {};
+    const lbKey = 'hist_'+id;
+    window._lbPhotos[lbKey] = photos;
+
+    document.getElementById('hpBody').innerHTML = `
+      <div style="margin-bottom:16px">
+        <span class="type-badge ${tk}">${TL[tk]||tk}</span>
+        <span style="font-size:14px;color:var(--dim);font-weight:600">${fmtDate(insp.submitted_at)}</span>
+      </div>
+      ${photos.length?`<div class="photo-grid">${photos.map((p,i)=>
+        `<div class="photo-cell${p.flagged?' flagged':''}" onclick="openLbArr('${lbKey}',${i})">
+          <img src="${esc(p.file_path)}" loading="lazy">
+          <div class="photo-cell-lbl">${esc(p.step_label||'Step '+p.step_number)}</div>
+          <div class="photo-cell-num">${p.step_number}</div>
+          ${p.flagged?'<div class="photo-flag-badge"><span class="material-icons-round" style="font-size:11px">flag</span></div>':''}
+        </div>`).join('')}</div>`:''}
+      <div class="drows" style="margin-top:14px">
+        <div class="drow"><span class="k">Driver</span><span class="v">${esc(insp.driver_name)}</span></div>
+        <div class="drow"><span class="k">Asset / Trailer</span><span class="v">${insp.asset_id
+          ? `<span class="asset-link" onclick="openAssetPanel(${insp.asset_id})">${esc(insp.asset_number||'—')}</span>`
+          : esc(insp.asset_number||'—')}</span></div>
+        <div class="drow"><span class="k">Truck</span><span class="v">${esc(insp.truck_model||'—')}</span></div>
+        ${insp.truck_number?`<div class="drow"><span class="k">Truck No.</span><span class="v">${esc(insp.truck_number)}</span></div>`:''}
+        <div class="drow"><span class="k">Photos</span><span class="v">${photos.length}</span></div>
+        <div class="drow"><span class="k">GPS</span><span class="v">${mapUrl?`<a href="${mapUrl}" target="_blank">View</a>`:'—'}</span></div>
+      </div>
+      ${insp.notes?`<div class="notes-box" style="margin-top:12px"><span class="material-icons-round" style="font-size:14px;vertical-align:-2px;margin-right:4px">notes</span>${esc(insp.notes)}</div>`:''}
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn-dl btn-pdf" href="/api/agent/inspections/${id}/report" target="_blank">
+          <span class="material-icons-round" style="font-size:16px">picture_as_pdf</span> PDF Report
+        </a>
+        <a class="btn-dl" href="/api/agent/inspections/${id}/download" download>
+          <span class="material-icons-round" style="font-size:16px">download</span> Download ZIP
+        </a>
+      </div>`;
+  if (window.applyIcons) applyIcons();
+  } catch (e) { document.getElementById('hpBody').innerHTML = '<div style="font-size:15px;color:var(--red);font-weight:700">Error loading.</div>'; }
+}
+
+function closeHistPanel() { document.getElementById('histPanel').classList.add('closed'); }
+
+function backToDrivers() {
+  document.querySelector('.drivers-col').style.display = '';
+  document.querySelector('.detail-col').style.display = '';
+  document.getElementById('detailContent').style.display = 'none';
+  document.getElementById('detailEmpty').style.display = 'flex';
+  document.getElementById('backToDriversBtn').style.display = 'none';
+  document.querySelectorAll('.driver-row').forEach(el => el.classList.remove('sel'));
+  G.sel = null;
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+function setAdminTab(t) {
+  const tabs = { drivers:'asDrivers', dispatchers:'asDispatchers', steps:'asSteps', assets:'asAssets' };
+  Object.values(tabs).forEach(id => { const el=document.getElementById(id); if(el) el.classList.remove('active'); });
+  const el = document.getElementById(tabs[t]); if(el) el.classList.add('active');
+  document.querySelectorAll('.at-btn').forEach((b,i) =>
+    b.classList.toggle('active', ['drivers','dispatchers','steps','assets'][i] === t));
+  if (t==='drivers') loadAdminDrivers();
+  if (t==='dispatchers') loadAdminDispatchers();
+  if (t==='steps') loadSteps();
+  if (t==='assets') loadAdminAssets();
+}
+
+async function createDriver() {
+  const body = { full_name:v('drName'), username:v('drUser'), email:v('drEmail'), password:v('drPass'), truck_model:v('drTruck'), truck_number:v('drTruckNum'), role:'driver' };
+  const al = document.getElementById('drAlert');
+  if (!body.full_name || !body.username || !body.password) { showAlert(al,'error','Name, username and password required.'); return; }
+  const r = await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok',`Driver "${body.full_name}" added!`);
+  ['drName','drUser','drEmail','drPass','drTruck','drTruckNum'].forEach(id => document.getElementById(id).value='');
+  loadAdminDrivers(); loadDrivers(); loadStats();
+}
+
+async function createDispatcher() {
+  const body = { full_name:v('diName'), username:v('diUser'), email:v('diEmail'), password:v('diPass'), role:'agent' };
+  const al = document.getElementById('diAlert');
+  if (!body.full_name || !body.username || !body.password) { showAlert(al,'error','Name, username and password required.'); return; }
+  const r = await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok',`Dispatcher "${body.full_name}" added!`);
+  ['diName','diUser','diEmail','diPass'].forEach(id => document.getElementById(id).value='');
+  loadAdminDispatchers(); loadStats();
+}
+
+async function loadAdminDrivers() {
+  try {
+    const users = await (await fetch('/api/admin/users?role=driver')).json();
+    const el = document.getElementById('driversTable');
+    if (!users.length) { el.innerHTML = '<div style="font-size:15px;color:var(--dim);font-weight:600">No drivers yet.</div>'; return; }
+    users.forEach(u => G.usersMap[u.id]=u);
+    el.innerHTML = `<div class="utbl-wrap"><table class="utbl">
+      <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Truck</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${users.map(u=>`<tr>
+        <td style="font-weight:800">${esc(u.full_name)}</td>
+        <td style="color:var(--dim)">${esc(u.username)}</td>
+        <td style="color:var(--dim);font-size:13px">${esc(u.email||'—')}</td>
+        <td style="font-size:13px;color:var(--dim)">${esc(u.truck_model||'—')}${u.truck_number?' · <strong>'+esc(u.truck_number)+'</strong>':''}</td>
+        <td><span style="font-size:12px;font-weight:800;padding:4px 12px;border-radius:20px;background:${u.active?'var(--green-light)':'var(--red-light)'};color:${u.active?'#16a34a':'var(--red)'}">${u.active?'Active':'Disabled'}</span></td>
+        <td><div class="utbl-actions">
+          <button class="tbl-btn edit" onclick="openEditModal(${u.id})"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">edit</span> Edit</button>
+          <button class="tbl-btn ${u.active?'disable':'enable'}" onclick="toggleUser(${u.id},${u.active},'drivers')">${u.active?'Disable':'Enable'}</button>
+          <button class="tbl-btn del" onclick="deleteUser(${u.id},'${esc(u.full_name)}','drivers')"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">delete</span> Delete</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) {}
+}
+
+async function loadAdminDispatchers() {
+  try {
+    const users = await (await fetch('/api/admin/users?role=agent')).json();
+    const el = document.getElementById('dispatchersTable');
+    if (!users.length) { el.innerHTML = '<div style="font-size:15px;color:var(--dim);font-weight:600">No dispatchers yet.</div>'; return; }
+    users.forEach(u => G.usersMap[u.id]=u);
+    el.innerHTML = `<div class="utbl-wrap"><table class="utbl">
+      <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${users.map(u=>`<tr>
+        <td style="font-weight:800">${esc(u.full_name)}</td>
+        <td style="color:var(--dim)">${esc(u.username)}</td>
+        <td style="color:var(--dim);font-size:13px">${esc(u.email||'—')}</td>
+        <td><span style="font-size:12px;font-weight:800;padding:4px 12px;border-radius:20px;background:${u.active?'var(--green-light)':'var(--red-light)'};color:${u.active?'#16a34a':'var(--red)'}">${u.active?'Active':'Disabled'}</span></td>
+        <td><div class="utbl-actions">
+          <button class="tbl-btn edit" onclick="openEditModal(${u.id})"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">edit</span> Edit</button>
+          <button class="tbl-btn ${u.active?'disable':'enable'}" onclick="toggleUser(${u.id},${u.active},'dispatchers')">${u.active?'Disable':'Enable'}</button>
+          <button class="tbl-btn del" onclick="deleteUser(${u.id},'${esc(u.full_name)}','dispatchers')"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">delete</span> Delete</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) {}
+}
+
+function openEditModal(id) {
+  const user = G.usersMap[id]; if (!user) return;
+  document.getElementById('editUserId').value = user.id;
+  document.getElementById('editName').value = user.full_name || '';
+  document.getElementById('editUsername').value = user.username || '';
+  document.getElementById('editEmail').value = user.email || '';
+  document.getElementById('editPass').value = '';
+  document.getElementById('editTruck').value = user.truck_model || '';
+  document.getElementById('editTruckNum').value = user.truck_number || '';
+  document.getElementById('editTruckFields').style.display = user.role==='driver'?'block':'none';
+  document.getElementById('editModalTitle').textContent = 'Edit '+user.full_name;
+  document.getElementById('editAlert').style.display = 'none';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.remove('open'); }
+
+async function saveEditUser() {
+  const id = document.getElementById('editUserId').value;
+  const body = { full_name:v('editName'), username:v('editUsername'), email:v('editEmail'), password:v('editPass'), truck_model:v('editTruck'), truck_number:v('editTruckNum') };
+  const al = document.getElementById('editAlert');
+  const r = await fetch(`/api/admin/users/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok','Changes saved!');
+  setTimeout(() => { closeEditModal(); loadAdminDrivers(); loadAdminDispatchers(); loadDrivers(); }, 1200);
+}
+
+async function toggleUser(id, active, tab) {
+  await fetch(`/api/admin/users/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  if (tab==='drivers') loadAdminDrivers(); else loadAdminDispatchers();
+  loadDrivers(); loadStats();
+}
+
+async function deleteUser(id, name, tab) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const r = await fetch(`/api/admin/users/${id}`,{method:'DELETE'});
+  const d = await r.json();
+  if (!r.ok) { alert(d.error||'Error deleting'); return; }
+  if (tab==='drivers') loadAdminDrivers(); else loadAdminDispatchers();
+  loadDrivers(); loadStats();
+}
+
+// ── Steps ─────────────────────────────────────────────────────────────────────
+async function loadSteps() {
+  try {
+    const steps = await (await fetch('/api/admin/steps')).json();
+    const el = document.getElementById('stepsTable');
+    if (!steps.length) { el.innerHTML = '<div style="font-size:15px;color:var(--dim);font-weight:600">No steps</div>'; return; }
+    const byType = {};
+    steps.forEach(s => { if (!byType[s.inspection_type]) byType[s.inspection_type]=[]; byType[s.inspection_type].push(s); });
+    el.innerHTML = Object.entries(byType).map(([type,ss]) => `
+      <div class="steps-list" style="margin-bottom:16px">
+        <div class="step-type-hd"><span class="type-badge ${type}">${TL[type]||type}</span>${ss.length} steps</div>
+        ${ss.map(s => `<div class="step-row${!s.active?' inactive':''}">
+          <div class="step-num-badge">${s.step_number}</div>
+          <div class="step-info"><div class="step-lbl">${esc(s.label)}</div><div class="step-inst">${esc(s.instruction)}</div></div>
+          <div class="step-actions">
+            <button class="step-tog${s.active?'':' off'}" onclick="toggleStep(${s.id},${s.active})">${s.active?'Disable':'Enable'}</button>
+            <button class="step-del" onclick="deleteStep(${s.id},'${esc(s.label)}')" title="Delete step"><span class="material-icons-round" style="font-size:14px;vertical-align:-2px">delete</span></button>
+          </div>
+        </div>`).join('')}
+      </div>`).join('');
+  } catch (e) {}
+}
+
+async function addStep() {
+  const type = document.getElementById('newStepType').value;
+  const label = document.getElementById('newStepLabel').value.trim();
+  const instruction = document.getElementById('newStepInstruction').value.trim();
+  const al = document.getElementById('stepAlert');
+  if (!label || !instruction) { showAlert(al,'error','Step label and instruction are required.'); return; }
+  const r = await fetch('/api/admin/steps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inspection_type:type,label,instruction})});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error adding step'); return; }
+  showAlert(al,'ok',`Step "${label}" added to ${TL[type]||type}!`);
+  document.getElementById('newStepLabel').value='';
+  document.getElementById('newStepInstruction').value='';
+  loadSteps();
+}
+
+async function toggleStep(id, active) {
+  await fetch(`/api/admin/steps/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  loadSteps();
+}
+
+async function deleteStep(id, label) {
+  if (!confirm(`Delete step "${label}"? This cannot be undone.`)) return;
+  const r = await fetch(`/api/admin/steps/${id}`,{method:'DELETE'});
+  if (!r.ok) { const d = await r.json().catch(()=>({})); alert(d.error||'Error deleting step'); return; }
+  loadSteps();
+}
+
+// ── Assets ────────────────────────────────────────────────────────────────────
+async function loadAdminAssets() {
+  try {
+    const assets = await (await fetch('/api/assets')).json();
+    const el = document.getElementById('assetsTable');
+    if (!assets.length) { el.innerHTML = '<div style="font-size:15px;color:var(--dim);font-weight:600">No assets yet.</div>'; return; }
+    el.innerHTML = `<div class="utbl-wrap"><table class="utbl">
+      <thead><tr><th>Asset #</th><th>Year</th><th>Make</th><th>Model</th><th>VIN</th><th>Plate</th><th>Actions</th></tr></thead>
+      <tbody>${assets.map(a=>`<tr>
+        <td style="font-weight:800;color:var(--brand)">${esc(a.asset_number)}</td>
+        <td style="color:var(--dim)">${esc(a.year||'—')}</td>
+        <td>${esc(a.make||'—')}</td>
+        <td>${esc(a.model||'—')}</td>
+        <td style="font-size:12px;color:var(--dim);font-family:monospace">${esc(a.vin||'—')}</td>
+        <td style="font-size:13px">${esc(a.license_plate||'—')}</td>
+        <td><div class="utbl-actions">
+          <button class="tbl-btn edit" onclick="openAssetPanel(${a.id})"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">open_in_new</span> View</button>
+          <button class="tbl-btn del" onclick="deleteAsset(${a.id},'${esc(a.asset_number)}')"><span class="material-icons-round" style="font-size:13px;vertical-align:-2px">delete</span> Remove</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) {}
+}
+
+async function createAsset() {
+  const body = {
+    asset_number: v('assetNum'), year: v('assetYear'), make: v('assetMake'),
+    model: v('assetModel'), vin: v('assetVin'), license_plate: v('assetPlate'), notes: v('assetNotes')
+  };
+  const al = document.getElementById('assetAlert');
+  if (!body.asset_number) { showAlert(al,'error','Asset number is required.'); return; }
+  const r = await fetch('/api/admin/assets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok',`Asset "${body.asset_number}" added!`);
+  ['assetNum','assetYear','assetMake','assetModel','assetVin','assetPlate','assetNotes'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  loadAdminAssets();
+}
+
+async function deleteAsset(id, num) {
+  if (!confirm(`Remove asset "${num}"? It won't appear in new inspections.`)) return;
+  await fetch(`/api/admin/assets/${id}`,{method:'DELETE'});
+  loadAdminAssets();
+}
+
+// ── Tab nav ───────────────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab${name}`).classList.add('active');
+  document.getElementById(`nav${name}`).classList.add('active');
+
+  const mobileNavMap = { Overview:'mNavOverview', Feed:'mNavFeed', Admin:'mNavAdmin' };
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  const mBtn = document.getElementById(mobileNavMap[name]);
+  if (mBtn) mBtn.classList.add('active');
+
+  if (name==='Feed') loadFeed();
+  if (name==='Admin') { loadAdminDrivers(); loadAdminDispatchers(); loadSteps(); }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function fmtDate(dt) {
+  if (!dt) return 'N/A';
+  const d = new Date(dt.includes('T')?dt:dt+'Z');
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function v(id) { return (document.getElementById(id)||{}).value?.trim()||''; }
+
+function showAlert(el, type, msg) {
+  el.textContent = msg;
+  el.style.color = type==='ok'?'#16a34a':'var(--red)';
+  el.style.borderColor = type==='ok'?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)';
+  el.style.background = type==='ok'?'var(--green-light)':'var(--red-light)';
+  el.style.display = 'block';
+  if (type==='ok') setTimeout(()=>el.style.display='none',3500);
+}
+
+async function logout() { await fetch('/api/logout',{method:'POST'}); location.href='/login'; }
+
+window.openAssetPanel = openAssetPanel; window.closeAssetPanel = closeAssetPanel;
+window.filterDrivers = filterDrivers; window.selectDriver = selectDriver;
+window.toggleCard = toggleCard; window.openLb = openLb; window.openLbArr = openLbArr;
+window.lbNav = lbNav; window.closeLb = closeLb; window.toggleFlag = toggleFlag;
+window.setFilter = setFilter; window.openHistPanel = openHistPanel;
+window.closeHistPanel = closeHistPanel; window.setAdminTab = setAdminTab;
+window.createDriver = createDriver; window.createDispatcher = createDispatcher;
+window.openEditModal = openEditModal; window.closeEditModal = closeEditModal;
+window.saveEditUser = saveEditUser; window.toggleUser = toggleUser;
+window.deleteUser = deleteUser; window.toggleStep = toggleStep;
+window.addStep = addStep; window.deleteStep = deleteStep;
+window.createAsset = createAsset; window.deleteAsset = deleteAsset;
+window.loadAdminAssets = loadAdminAssets;
+window.showTab = showTab; window.logout = logout; window.backToDrivers = backToDrivers;

@@ -53,15 +53,16 @@ router.get('/api/assets/:id', agent, async (req, res) => {
 router.get('/api/agent/drivers', agent, async (req, res) => {
   try {
     const rows = await db.prepare(`
-      SELECT u.id, u.full_name, u.username, u.email,
-             u.truck_model, u.truck_number, u.active,
+      SELECT u.id, u.full_name, u.username, u.email, u.active,
+             t.truck_number, t.truck_model, t.id as truck_id,
              COUNT(i.id) as total_inspections,
              MAX(i.submitted_at) as last_inspection,
              SUM(CASE WHEN i.status='submitted' THEN 1 ELSE 0 END) as submitted_count
       FROM users u
+      LEFT JOIN trucks t ON t.driver_id = u.id AND t.active = 1
       LEFT JOIN inspections i ON i.driver_id = u.id
       WHERE u.role = 'driver'
-      GROUP BY u.id
+      GROUP BY u.id, t.truck_number, t.truck_model, t.id
       ORDER BY u.full_name
     `).all();
     res.json(rows);
