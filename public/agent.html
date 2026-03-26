@@ -5,23 +5,524 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kurtex — Dashboard</title>
 <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
 <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <meta name="theme-color" content="#1e4da1">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/styles.css">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Nunito', sans-serif;
+  background: #f0f2f8;
+  color: #111827;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+}
+
+/* ── Variables ── */
+:root {
+  --brand: #1e4da1; --brand2: #163d85; --brand3: #0d2a5e;
+  --brand-light: rgba(30,77,161,0.08); --brand-mid: rgba(30,77,161,0.2);
+  --surface: #ffffff; --surface2: #f7f8fc; --surface3: #eef0f8;
+  --border: #e2e6f3; --border2: #d0d6ee;
+  --text: #111827; --dim: #5a6278; --muted: #9aa3be;
+  --green: #16a34a; --green-light: rgba(22,163,74,0.1);
+  --red: #dc2626;   --red-light: rgba(220,38,38,0.1);
+  --amber: #d97706; --amber-light: rgba(217,119,6,0.1);
+  --indigo: #7c3aed; --indigo-light: rgba(124,58,237,0.1);
+  --radius: 18px; --radius-sm: 12px; --radius-xs: 9px;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 5px; }
+
+/* ── Header ── */
+.hdr {
+  background: var(--surface); border-bottom: 1.5px solid var(--border);
+  padding: 0 24px; height: 60px; display: flex; align-items: center;
+  gap: 14px; flex-shrink: 0; position: relative; z-index: 100;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+}
+.logo-wrap { display: flex; align-items: center; gap: 10px; }
+.logo-img { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; }
+.logo-text { font-size: 18px; font-weight: 900; color: var(--text); letter-spacing: -0.5px; }
+.role-chip { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: var(--brand-light); color: var(--brand); }
+.hdr-r { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.agent-name { font-size: 14px; font-weight: 700; color: var(--dim); }
+.btn-signout {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--dim);
+  padding: 8px 14px; font-family: 'Nunito', sans-serif;
+  font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+}
+.btn-signout:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Layout ── */
+.app { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 210px; background: var(--surface); border-right: 1.5px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+  padding: 16px 10px; gap: 3px;
+}
+.nav-btn {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  background: none; border: none; border-radius: var(--radius-sm);
+  padding: 13px 15px; font-family: 'Nunito', sans-serif;
+  font-size: 15px; font-weight: 700; color: var(--dim);
+  cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.nav-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+.nav-btn:hover { background: var(--surface2); color: var(--text); }
+.nav-btn.active { background: var(--brand-light); color: var(--brand); font-weight: 800; }
+.nav-sep { height: 1px; background: var(--border); margin: 5px 0; }
+
+/* ── Panel area ── */
+.panel-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.tab { display: none; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+.tab.active { display: flex; }
+
+/* ── Stats bar ── */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(5,1fr); gap: 10px;
+  padding: 16px 20px; background: var(--surface);
+  border-bottom: 1.5px solid var(--border); flex-shrink: 0;
+}
+.stat-box {
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+}
+.stat-num { font-size: 26px; font-weight: 900; color: var(--text); letter-spacing: -0.5px; }
+.stat-num.brand { color: var(--brand); }
+.stat-lbl { font-size: 12px; color: var(--dim); font-weight: 600; margin-top: 2px; }
+
+/* ── Fleet / Overview ── */
+.ov-wrap { display: flex; flex: 1; overflow: hidden; }
+.drivers-col {
+  width: 280px; border-right: 1.5px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0; background: var(--surface);
+}
+.col-hd { padding: 16px 18px; border-bottom: 1.5px solid var(--border); flex-shrink: 0; }
+.col-hd-lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.col-hd-title { font-size: 22px; font-weight: 900; color: var(--text); margin-top: 2px; }
+.col-hd-title em { color: var(--brand); font-style: normal; }
+.search-inp {
+  width: 100%; background: var(--surface2); border: none;
+  border-bottom: 1.5px solid var(--border); color: var(--text);
+  padding: 13px 18px; font-family: 'Nunito', sans-serif;
+  font-size: 14px; font-weight: 500; outline: none; flex-shrink: 0;
+}
+.search-inp::placeholder { color: var(--muted); }
+.drivers-list { flex: 1; overflow-y: auto; }
+.driver-row {
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: all 0.14s; display: flex; align-items: center; gap: 11px;
+}
+.driver-row:hover { background: var(--surface2); }
+.driver-row.sel { background: var(--brand-light); border-left: 3px solid var(--brand); }
+.dr-av {
+  width: 40px; height: 40px; border-radius: 12px; background: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 900; color: #fff; flex-shrink: 0;
+}
+.dr-name { font-size: 15px; font-weight: 800; color: var(--text); }
+.dr-sub { font-size: 12px; color: var(--dim); font-weight: 500; margin-top: 2px; }
+.dr-cnt { margin-left: auto; font-size: 20px; font-weight: 900; color: var(--brand); flex-shrink: 0; }
+
+.detail-col { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.detail-empty svg { width: 48px; height: 48px; color: var(--muted); }
+.empty-txt { font-size: 16px; color: var(--dim); font-weight: 600; }
+.detail-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.detail-hd {
+  padding: 16px 20px; border-bottom: 1.5px solid var(--border); flex-shrink: 0;
+}
+.mobile-back-btn {
+  display: none; align-items: center; gap: 4px; background: none; border: none;
+  font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700;
+  color: var(--brand); cursor: pointer; padding: 0; margin-bottom: 8px;
+}
+.detail-name { font-size: 24px; font-weight: 900; color: var(--text); letter-spacing: -0.4px; }
+.detail-sub { font-size: 14px; color: var(--dim); font-weight: 500; display: flex; gap: 12px; margin-top: 3px; }
+.insp-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Inspection cards */
+.insp-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.insp-card-hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; gap: 10px; }
+.insp-card-hd:hover { background: var(--surface2); }
+.insp-card-date { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 3px; }
+.insp-card-sub { font-size: 12px; color: var(--dim); font-weight: 500; }
+.insp-card-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.insp-card-body { display: none; border-top: 1px solid var(--border); padding: 14px 16px; }
+.insp-card-body.open { display: block; }
+.chev { transition: transform 0.2s; }
+.chev.open { transform: rotate(180deg); }
+
+/* Badges */
+.type-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-right: 6px; }
+.type-badge.pickup  { background: var(--brand-light); color: var(--brand); }
+.type-badge.drop    { background: var(--amber-light); color: var(--amber); }
+.type-badge.general { background: var(--indigo-light); color: var(--indigo); }
+.pill-ok { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: var(--green-light); color: var(--green); white-space: nowrap; }
+.pill-progress { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: var(--amber-light); color: var(--amber); white-space: nowrap; }
+
+/* Photo grid */
+.photo-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 12px; }
+.photo-cell { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; }
+.photo-cell:hover { border-color: var(--brand); }
+.photo-cell.flagged { border-color: var(--red); }
+.photo-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-cell-lbl { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.6)); color: #fff; font-size: 10px; font-weight: 700; padding: 10px 5px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-cell-num { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,0.5); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 5px; border-radius: 4px; }
+.photo-flag-badge { position: absolute; top: 3px; left: 3px; background: var(--red); color: #fff; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.photo-flag-badge svg { width: 10px; height: 10px; }
+
+/* Info rows */
+.drows { background: var(--surface2); border: 1.5px solid var(--border); border-radius: var(--radius-xs); overflow: hidden; margin-bottom: 10px; }
+.drow { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); gap: 8px; }
+.drow:last-child { border-bottom: none; }
+.drow .k { font-size: 13px; font-weight: 600; color: var(--dim); }
+.drow .v { font-size: 14px; font-weight: 700; color: var(--text); text-align: right; }
+.drow .v a { color: var(--brand); text-decoration: none; }
+.notes-box { background: var(--amber-light); border: 1.5px solid rgba(217,119,6,0.2); border-radius: var(--radius-xs); padding: 10px 14px; font-size: 13px; font-weight: 600; color: #92400e; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 6px; }
+
+/* Buttons */
+.btn-dl {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700;
+  padding: 7px 14px; border-radius: var(--radius-xs); cursor: pointer;
+  transition: all 0.15s; text-decoration: none; border: 1.5px solid transparent;
+}
+.btn-dl.btn-view { background: var(--brand-light); color: var(--brand); border-color: var(--brand-mid); }
+.btn-dl.btn-view:hover { background: var(--brand); color: #fff; }
+.btn-dl.btn-pdf { background: var(--red-light); color: var(--red); border-color: rgba(220,38,38,0.2); }
+.btn-dl.btn-pdf:hover { background: var(--red); color: #fff; }
+.btn-dl.btn-zip { background: var(--surface2); color: var(--dim); border-color: var(--border); }
+.btn-dl.btn-zip:hover { background: var(--text); color: #fff; border-color: var(--text); }
+.asset-link { color: var(--brand); cursor: pointer; font-weight: 700; }
+.asset-link:hover { text-decoration: underline; }
+
+/* ── HISTORY TAB ── */
+.feed-outer { flex: 1; overflow: hidden; display: flex; }
+.history-main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.feed-toolbar {
+  padding: 14px 20px; background: var(--surface); border-bottom: 1.5px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+}
+.page-title { font-size: 18px; font-weight: 900; color: var(--text); margin-right: 8px; letter-spacing: -0.3px; }
+.filter-chip {
+  background: var(--surface2); border: 1.5px solid var(--border); border-radius: 20px;
+  color: var(--dim); padding: 6px 14px; font-family: 'Nunito', sans-serif;
+  font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.14s;
+}
+.filter-chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.filter-chip:hover:not(.active) { border-color: var(--brand); color: var(--brand); }
+.history-scroll { flex: 1; overflow-y: auto; }
+.htbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.htbl thead th { background: var(--surface2); border-bottom: 1.5px solid var(--border); padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; z-index: 5; white-space: nowrap; }
+.htbl tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; cursor: pointer; }
+.htbl tbody tr:hover { background: var(--surface2); }
+.htbl tbody td { padding: 13px 16px; font-weight: 500; vertical-align: middle; }
+.htbl tbody td:first-child { font-family: monospace; font-size: 12px; color: var(--muted); font-weight: 600; }
+.action-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--dim); padding: 5px 10px;
+  font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.14s;
+}
+.action-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* Side panels */
+.hist-panel, .asset-panel {
+  width: 0; background: var(--surface); border-left: 1.5px solid var(--border);
+  overflow: hidden; transition: width 0.28s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.hist-panel.open, .asset-panel.open { width: 380px; }
+.hp-hd { padding: 16px 18px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.hp-title { font-size: 17px; font-weight: 900; color: var(--text); }
+.hp-close {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--dim); padding: 7px 12px;
+  font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.14s;
+}
+.hp-close:hover { border-color: var(--red); color: var(--red); }
+.hp-body { flex: 1; overflow-y: auto; padding: 16px; }
+.ap-hd { padding: 16px 18px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+.ap-title { font-size: 17px; font-weight: 900; color: var(--text); }
+.ap-sub { font-size: 12px; color: var(--dim); font-weight: 500; margin-top: 2px; }
+.ap-body { flex: 1; overflow-y: auto; padding: 16px; }
+.ap-stats { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 14px; }
+.ap-stat { background: var(--surface2); border: 1.5px solid var(--border); border-radius: var(--radius-xs); padding: 10px 12px; text-align: center; }
+.ap-stat.flagged { border-color: rgba(220,38,38,0.3); background: var(--red-light); }
+.ap-stat-num { font-size: 22px; font-weight: 900; color: var(--text); }
+.ap-stat.flagged .ap-stat-num { color: var(--red); }
+.ap-stat-lbl { font-size: 11px; color: var(--dim); font-weight: 600; margin-top: 2px; }
+.ap-section-hd { font-size: 11px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 0.7px; margin: 14px 0 8px; }
+.ap-info-card { background: var(--surface2); border: 1.5px solid var(--border); border-radius: var(--radius-xs); overflow: hidden; margin-bottom: 12px; }
+.ap-info-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--border); gap: 10px; }
+.ap-info-row:last-child { border-bottom: none; }
+.ap-info-row .k { font-size: 12px; font-weight: 600; color: var(--dim); }
+.ap-info-row .v { font-size: 13px; font-weight: 700; color: var(--text); text-align: right; }
+.ap-insp-row { padding: 11px 13px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; transition: background 0.12s; }
+.ap-insp-row:hover { background: var(--surface2); }
+.ap-insp-row:last-child { border-bottom: none; }
+.ap-flag-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: var(--red-light); color: var(--red); }
+
+/* ── INCOMPLETE / IN-PROGRESS TAB ── */
+.incomplete-scroll { flex: 1; overflow-y: auto; }
+.incomplete-card {
+  margin: 10px 16px; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px; display: flex; align-items: flex-start; gap: 14px;
+}
+.incomplete-icon {
+  width: 44px; height: 44px; border-radius: 12px; background: var(--amber-light);
+  border: 1.5px solid rgba(217,119,6,0.25); display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.incomplete-icon svg { width: 22px; height: 22px; color: var(--amber); }
+.incomplete-info { flex: 1; min-width: 0; }
+.incomplete-name { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 3px; }
+.incomplete-meta { font-size: 13px; color: var(--dim); font-weight: 500; margin-bottom: 6px; }
+.incomplete-reason { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: var(--amber-light); color: var(--amber); display: inline-block; margin-bottom: 8px; }
+.incomplete-progress { height: 6px; background: var(--border); border-radius: 6px; overflow: hidden; margin-top: 8px; }
+.incomplete-progress-fill { height: 100%; background: var(--amber); border-radius: 6px; transition: width 0.3s; }
+
+/* ── ADMIN TAB — NEW DESIGN ── */
+.admin-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* Left: section selector */
+.admin-nav {
+  width: 200px; background: var(--surface); border-right: 1.5px solid var(--border);
+  padding: 16px 10px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;
+}
+.admin-nav-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 8px; margin-bottom: 8px; }
+.adm-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; border-radius: var(--radius-sm);
+  padding: 12px 14px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+  color: var(--dim); cursor: pointer; transition: all 0.14s; text-align: left;
+}
+.adm-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.adm-btn:hover { background: var(--surface2); color: var(--text); }
+.adm-btn.active { background: var(--brand-light); color: var(--brand); font-weight: 800; }
+.adm-sep { height: 1px; background: var(--border); margin: 6px 0; }
+
+/* Center: content */
+.admin-content { flex: 1; overflow-y: auto; padding: 24px 28px; max-width: 700px; }
+.admin-section { display: none; }
+.admin-section.active { display: block; }
+.admin-section-title { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.4px; margin-bottom: 4px; }
+.admin-section-sub { font-size: 14px; color: var(--dim); font-weight: 500; margin-bottom: 24px; }
+
+/* Add form */
+.add-form { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 24px; }
+.add-form-title { font-size: 15px; font-weight: 800; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.add-form-title svg { width: 18px; height: 18px; color: var(--brand); }
+.form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.fg { flex: 1; min-width: 160px; }
+.flbl { display: block; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; letter-spacing: 0.1px; }
+.finput {
+  display: block; width: 100%; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--text); padding: 11px 13px;
+  font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 500; outline: none; transition: all 0.18s;
+}
+.finput:focus { border-color: var(--brand); background: #fff; box-shadow: 0 0 0 3px var(--brand-light); }
+.finput::placeholder { color: var(--muted); }
+textarea.finput { resize: vertical; min-height: 80px; }
+.btn-add {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--brand); color: #fff; border: none;
+  padding: 12px 20px; border-radius: var(--radius-xs);
+  font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(30,77,161,0.25); transition: all 0.18s;
+}
+.btn-add:hover { background: var(--brand2); transform: translateY(-1px); }
+.alert-box { margin-top: 12px; font-size: 14px; font-weight: 600; padding: 11px 15px; border-radius: var(--radius-xs); display: none; line-height: 1.5; }
+
+/* User / step rows */
+.list-section-hd { font-size: 11px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 10px; }
+.utbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.utbl thead th { background: var(--surface2); border-bottom: 1.5px solid var(--border); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.utbl tbody tr { border-bottom: 1px solid var(--border); }
+.utbl tbody tr:hover { background: var(--surface2); }
+.utbl tbody td { padding: 12px 14px; font-weight: 500; vertical-align: middle; }
+.utbl-wrap { border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 16px; }
+.utbl-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+.tbl-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 11px; border-radius: var(--radius-xs); border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--dim); font-family: 'Nunito', sans-serif;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.14s; white-space: nowrap;
+}
+.tbl-btn.edit:hover { border-color: var(--brand); color: var(--brand); }
+.tbl-btn.del:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
+.tbl-btn.disable:hover { border-color: var(--amber); color: var(--amber); }
+.tbl-btn.enable:hover { border-color: var(--green); color: var(--green); }
+
+/* ── STEPS — 3-column split view ── */
+.steps-layout { display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.steps-type-col {
+  width: 180px; border-right: 1.5px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0; background: var(--surface2);
+}
+.steps-type-btn {
+  padding: 16px 18px; border: none; background: none; text-align: left;
+  font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+  color: var(--dim); cursor: pointer; transition: all 0.14s; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.steps-type-btn:last-child { border-bottom: none; }
+.steps-type-btn:hover { background: var(--surface); color: var(--text); }
+.steps-type-btn.active { background: var(--brand); color: #fff; }
+.steps-type-btn .step-count { font-size: 12px; font-weight: 700; opacity: 0.7; }
+.steps-list-col { flex: 1; overflow-y: auto; max-height: 500px; background: var(--surface); }
+.step-row {
+  display: flex; align-items: center; gap: 12px; padding: 13px 16px;
+  border-bottom: 1px solid var(--border); transition: background 0.12s;
+}
+.step-row:last-child { border-bottom: none; }
+.step-row:hover { background: var(--surface2); }
+.step-row.inactive { opacity: 0.45; }
+.step-num-badge {
+  width: 30px; height: 30px; border-radius: 9px; background: var(--brand-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 900; color: var(--brand); flex-shrink: 0;
+}
+.step-row.inactive .step-num-badge { background: var(--surface3); color: var(--muted); }
+.step-info { flex: 1; min-width: 0; }
+.step-lbl { font-size: 14px; font-weight: 800; color: var(--text); }
+.step-inst { font-size: 12px; color: var(--dim); font-weight: 500; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.step-tog {
+  padding: 5px 11px; border-radius: var(--radius-xs); border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--dim); font-family: 'Nunito', sans-serif;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.14s;
+}
+.step-tog:hover { border-color: var(--amber); color: var(--amber); }
+.step-tog.off:hover { border-color: var(--green); color: var(--green); }
+.step-del {
+  width: 30px; height: 30px; border-radius: var(--radius-xs); border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--dim); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.14s;
+}
+.step-del:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
+.step-del svg { width: 14px; height: 14px; }
+.step-type-hd { font-size: 11px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 0.7px; padding: 12px 16px 8px; }
+
+/* ── MODAL ── */
+.modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 500; align-items: center; justify-content: center; padding: 20px;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: var(--surface); border-radius: var(--radius); width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,0.25);
+}
+.modal-hd { padding: 20px 22px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: 18px; font-weight: 900; }
+.modal-close {
+  display: flex; align-items: center; gap: 4px; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--dim); padding: 7px 12px;
+  font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.14s;
+}
+.modal-close:hover { border-color: var(--red); color: var(--red); }
+.modal-body { padding: 22px; }
+
+/* ── LIGHTBOX ── */
+.lightbox {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000;
+  flex-direction: column; align-items: center; justify-content: center;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.lightbox.open { display: flex; }
+.lb-close {
+  position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1);
+  border: 1.5px solid rgba(255,255,255,0.2); border-radius: 9px; color: #fff;
+  padding: 8px 14px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.14s;
+}
+.lb-close:hover { background: var(--red); border-color: var(--red); }
+.lb-img { max-width: min(92vw,900px); max-height: 72vh; object-fit: contain; border-radius: 10px; }
+.lb-meta { color: rgba(255,255,255,0.65); font-size: 13px; font-weight: 600; margin-top: 14px; text-align: center; }
+.lb-controls { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+.lb-nav button {
+  background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 9px; color: #fff; padding: 9px 18px;
+  font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all 0.14s;
+}
+.lb-nav button:hover { background: rgba(255,255,255,0.22); }
+.lb-flag-btn {
+  background: rgba(220,38,38,0.8); border: none; border-radius: 9px; color: #fff;
+  padding: 9px 18px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; gap: 7px; transition: all 0.14s;
+}
+.lb-flag-btn:hover { background: var(--red); }
+.lb-flag-btn.flagged { background: rgba(217,119,6,0.8); }
+.lb-flag-btn.flagged:hover { background: var(--amber); }
+
+/* ── MOBILE BOTTOM NAV ── */
+.mobile-nav {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: var(--surface); border-top: 1.5px solid var(--border);
+  padding: 6px 8px;
+}
+.mobile-nav-btn {
+  flex: 1; background: none; border: none; border-radius: var(--radius-xs);
+  padding: 7px 5px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: 'Nunito', sans-serif; font-size: 10px; font-weight: 700; color: var(--dim); cursor: pointer;
+}
+.mobile-nav-btn svg { width: 22px; height: 22px; }
+.mobile-nav-btn.active { color: var(--brand); }
+.mobile-nav { display: none; flex-direction: row; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .hdr { padding: 0 14px; }
+  .agent-name { display: none; }
+  .app { flex-direction: column; }
+  .sidebar { display: none; }
+  .mobile-nav { display: flex !important; }
+  .panel-area { height: calc(100vh - 60px - 58px); }
+  .stats-bar { grid-template-columns: repeat(3,1fr); gap: 7px; padding: 11px 13px; }
+  .drivers-col { width: 100%; border-right: none; border-bottom: 1.5px solid var(--border); }
+  .ov-wrap { flex-direction: column; }
+  .mobile-back-btn { display: flex !important; }
+  .hist-panel.open, .asset-panel.open { position: fixed; inset: 0; width: 100%; z-index: 300; }
+  .htbl thead th:nth-child(3),.htbl tbody td:nth-child(3),
+  .htbl thead th:nth-child(4),.htbl tbody td:nth-child(4) { display: none; }
+  .admin-layout { flex-direction: column; }
+  .admin-nav { width: 100%; flex-direction: row; border-right: none; border-bottom: 1.5px solid var(--border); overflow-x: auto; padding: 8px; }
+  .admin-nav-title { display: none; }
+  .admin-content { padding: 16px; max-width: 100%; }
+  .steps-layout { flex-direction: column; }
+  .steps-type-col { width: 100%; flex-direction: row; border-right: none; border-bottom: 1.5px solid var(--border); }
+  .steps-list-col { max-height: none; }
+}
+</style>
 </head>
 <body>
-<header class="hdr-app">
+
+<header class="hdr">
   <div class="logo-wrap">
-    <img src="img/logo-inspection.png" class="logo-img logo-img-sm" alt="Kurtex logo">
+    <img src="img/logo-inspection.png" class="logo-img" alt="Kurtex">
     <div class="logo-text">Kurtex</div>
   </div>
   <div class="role-chip" id="roleBadge">Dispatcher</div>
   <div class="hdr-r">
     <span class="agent-name" id="agentName">Loading…</span>
     <button class="btn-signout" onclick="logout()">
-      <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">logout</span> Sign Out
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
     </button>
   </div>
 </header>
@@ -29,24 +530,30 @@
 <div class="app">
   <nav class="sidebar">
     <button class="nav-btn active" id="navOverview" onclick="showTab('Overview')">
-      <span class="material-icons-round">dashboard</span>Fleet
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Fleet
     </button>
-    <div class="nav-sep"></div>
     <button class="nav-btn" id="navFeed" onclick="showTab('Feed')">
-      <span class="material-icons-round">history</span>History
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/><polyline points="12 7 12 12 15 14"/></svg>
+      History
+    </button>
+    <button class="nav-btn" id="navIncomplete" onclick="showTab('Incomplete')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Incomplete
     </button>
     <div class="nav-sep" id="adminSep" style="display:none"></div>
     <button class="nav-btn" id="navAdmin" onclick="showTab('Admin')" style="display:none">
-      <span class="material-icons-round">manage_accounts</span>Admin
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+      Admin
     </button>
   </nav>
 
   <div class="panel-area">
 
-    <!-- OVERVIEW -->
+    <!-- FLEET TAB -->
     <div class="tab active" id="tabOverview">
       <div class="stats-bar">
-        <div class="stat-box"><div class="stat-num" id="sD">—</div><div class="stat-lbl">Active Drivers</div></div>
+        <div class="stat-box"><div class="stat-num" id="sD">—</div><div class="stat-lbl">Drivers</div></div>
         <div class="stat-box"><div class="stat-num" id="sDi">—</div><div class="stat-lbl">Dispatchers</div></div>
         <div class="stat-box"><div class="stat-num" id="sT">—</div><div class="stat-lbl">Inspections</div></div>
         <div class="stat-box"><div class="stat-num brand" id="sTd">—</div><div class="stat-lbl">Today</div></div>
@@ -54,19 +561,23 @@
       </div>
       <div class="ov-wrap">
         <div class="drivers-col">
-          <div class="col-hd"><div class="col-hd-lbl">Fleet</div><div class="col-hd-title"><em id="dCount">0</em> Drivers</div></div>
-          <input class="search-inp" type="text" placeholder="Search…" id="searchBox" oninput="filterDrivers()">
-          <div class="drivers-list" id="driversList"><div style="padding:16px;font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
+          <div class="col-hd">
+            <div class="col-hd-lbl">Fleet</div>
+            <div class="col-hd-title"><em id="dCount">0</em> Drivers</div>
+          </div>
+          <input class="search-inp" type="text" placeholder="Search drivers…" id="searchBox" oninput="filterDrivers()">
+          <div class="drivers-list" id="driversList"><div style="padding:16px;color:var(--dim);font-weight:600">Loading…</div></div>
         </div>
         <div class="detail-col">
           <div class="detail-empty" id="detailEmpty">
-            <div class="empty-icon"><span class="material-icons-round" style="font-size:40px;color:var(--muted)">assignment</span></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
             <div class="empty-txt">Select a driver to view inspections</div>
           </div>
-          <div class="detail-content" id="detailContent">
+          <div class="detail-content" id="detailContent" style="display:none">
             <div class="detail-hd">
               <button class="mobile-back-btn" id="backToDriversBtn" onclick="backToDrivers()">
-                <span class="material-icons-round" style="font-size:18px">chevron_left</span>All Drivers
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><polyline points="15 18 9 12 15 6"/></svg>
+                All Drivers
               </button>
               <div class="detail-name" id="detailName">—</div>
               <div class="detail-sub" id="detailSub"></div>
@@ -77,7 +588,7 @@
       </div>
     </div>
 
-    <!-- HISTORY -->
+    <!-- HISTORY TAB -->
     <div class="tab" id="tabFeed">
       <div class="feed-outer">
         <div class="history-main">
@@ -91,179 +602,223 @@
           <div class="history-scroll">
             <table class="htbl">
               <thead><tr><th>ID</th><th>Status</th><th>Date</th><th>Asset</th><th>Driver</th><th>Type</th><th>Actions</th></tr></thead>
-              <tbody id="feedBody"><tr><td colspan="7" style="padding:20px;font-size:15px;color:var(--dim);font-weight:600">Loading…</td></tr></tbody>
+              <tbody id="feedBody"><tr><td colspan="7" style="padding:20px;color:var(--dim);font-weight:600">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>
-        <div class="hist-panel closed" id="histPanel">
+        <div class="hist-panel" id="histPanel">
           <div class="hp-hd">
             <div class="hp-title" id="hpTitle">Inspection</div>
-            <button class="hp-close" onclick="closeHistPanel()">
-              <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
-            </button>
+            <button class="hp-close" onclick="closeHistPanel()">✕ Close</button>
           </div>
           <div class="hp-body" id="hpBody"></div>
         </div>
-        <div class="asset-panel closed" id="assetPanel">
+        <div class="asset-panel" id="assetPanel">
           <div class="ap-hd">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0">
-              <span class="material-icons-round" style="font-size:22px;color:var(--brand);flex-shrink:0">directions_car</span>
-              <div style="min-width:0">
-                <div class="ap-title" id="apTitle">Asset</div>
-                <div class="ap-sub" id="apSub"></div>
-              </div>
+            <div>
+              <div class="ap-title" id="apTitle">Asset</div>
+              <div class="ap-sub" id="apSub"></div>
             </div>
-            <button class="hp-close" onclick="closeAssetPanel()">
-              <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
-            </button>
+            <button class="hp-close" onclick="closeAssetPanel()">✕ Close</button>
           </div>
           <div class="ap-body" id="apBody"></div>
         </div>
       </div>
     </div>
 
-    <!-- ADMIN -->
-    <div class="tab" id="tabAdmin">
-      <div class="admin-scroll">
-        <div class="admin-title">Admin Panel</div>
-        <div class="admin-sub">Manage drivers, dispatchers, assets, and inspection steps</div>
-        <div class="admin-tabs">
-          <button class="at-btn active" onclick="setAdminTab('drivers')">
-            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">local_shipping</span> Drivers
-          </button>
-          <button class="at-btn" onclick="setAdminTab('dispatchers')">
-            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">assignment_ind</span> Dispatchers
-          </button>
-          <button class="at-btn" onclick="setAdminTab('steps')">
-            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">checklist</span> Steps
-          </button>
-          <button class="at-btn" onclick="setAdminTab('assets')">
-            <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">directions_car</span> Assets
-          </button>
-        </div>
-
-        <!-- DRIVERS -->
-        <div class="admin-section active" id="asDrivers">
-          <div class="sec-hd">Add New Driver</div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="drName" placeholder="James Rodriguez"></div>
-            <div class="fg"><label class="flbl">Username *</label><input class="finput" id="drUser" placeholder="jrodriguez" autocapitalize="none"></div>
-          </div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="drEmail" placeholder="james@company.com"></div>
-            <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="drPass" placeholder="min 6 characters"></div>
-          </div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Truck Model</label><input class="finput" id="drTruck" placeholder="Freightliner Cascadia 2022"></div>
-            <div class="fg"><label class="flbl">Truck Number</label><input class="finput" id="drTruckNum" placeholder="TRK-003"></div>
-          </div>
-          <button class="btn-form" onclick="createDriver()">
-            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">person_add</span> Add Driver</span>
-            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
-          </button>
-          <div class="alert-box" id="drAlert"></div>
-          <div style="height:28px"></div>
-          <div class="sec-hd">All Drivers</div>
-          <div id="driversTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
-        </div>
-
-        <!-- DISPATCHERS -->
-        <div class="admin-section" id="asDispatchers">
-          <div class="sec-hd">Add New Dispatcher</div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="diName" placeholder="Sarah Mitchell"></div>
-            <div class="fg"><label class="flbl">Username *</label><input class="finput" id="diUser" placeholder="smitchell" autocapitalize="none"></div>
-          </div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="diEmail" placeholder="sarah@company.com"></div>
-            <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="diPass" placeholder="min 6 characters"></div>
-          </div>
-          <button class="btn-form" onclick="createDispatcher()">
-            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">person_add</span> Add Dispatcher</span>
-            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
-          </button>
-          <div class="alert-box" id="diAlert"></div>
-          <div style="height:28px"></div>
-          <div class="sec-hd">All Dispatchers</div>
-          <div id="dispatchersTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
-        </div>
-
-        <!-- STEPS -->
-        <div class="admin-section" id="asSteps">
-          <div class="sec-hd">Manage Inspection Steps</div>
-          <div class="add-step-form">
-            <div class="add-step-form-title">
-              <span class="material-icons-round" style="font-size:18px;vertical-align:-4px;color:var(--brand)">add_circle</span>
-              Add New Step
-            </div>
-            <div class="form-row">
-              <div class="fg">
-                <label class="flbl">Inspection Type</label>
-                <select class="finput" id="newStepType">
-                  <option value="pickup">PickUp</option>
-                  <option value="drop">Drop</option>
-                  <option value="general">General</option>
-                </select>
-              </div>
-              <div class="fg"><label class="flbl">Step Label *</label><input class="finput" id="newStepLabel" placeholder="e.g. Engine Compartment"></div>
-            </div>
-            <div class="fg" style="margin-bottom:14px">
-              <label class="flbl">Instruction *</label>
-              <textarea class="finput" id="newStepInstruction" placeholder="Describe what the driver should photograph…" style="min-height:80px;resize:vertical"></textarea>
-            </div>
-            <button class="btn-form" onclick="addStep()">
-              <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">add</span> Add Step</span>
-              <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
-            </button>
-            <div class="alert-box" id="stepAlert"></div>
-          </div>
-          <div style="height:24px"></div>
-          <div class="sec-hd">All Steps</div>
-          <div id="stepsTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
-        </div>
-
-        <!-- ASSETS -->
-        <div class="admin-section" id="asAssets">
-          <div class="sec-hd">Add New Trailer / Asset</div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Asset Number *</label><input class="finput" id="assetNum" placeholder="W98754"></div>
-            <div class="fg"><label class="flbl">Year</label><input class="finput" id="assetYear" placeholder="2022"></div>
-          </div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">Make</label><input class="finput" id="assetMake" placeholder="Utility Trailer"></div>
-            <div class="fg"><label class="flbl">Model</label><input class="finput" id="assetModel" placeholder="DuraPlate"></div>
-          </div>
-          <div class="form-row">
-            <div class="fg"><label class="flbl">VIN</label><input class="finput" id="assetVin" placeholder="3UTVS2534N8536419"></div>
-            <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="assetPlate" placeholder="IL 9R5227"></div>
-          </div>
-          <div class="fg" style="margin-bottom:14px">
-            <label class="flbl">Notes</label>
-            <input class="finput" id="assetNotes" placeholder="Optional notes">
-          </div>
-          <button class="btn-form" onclick="createAsset()">
-            <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">add</span> Add Asset</span>
-            <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
-          </button>
-          <div class="alert-box" id="assetAlert"></div>
-          <div style="height:28px"></div>
-          <div class="sec-hd">All Assets</div>
-          <div id="assetsTable"><div style="font-size:15px;color:var(--dim);font-weight:600">Loading…</div></div>
-        </div>
-
+    <!-- INCOMPLETE / IN-PROGRESS TAB -->
+    <div class="tab" id="tabIncomplete">
+      <div class="feed-toolbar">
+        <div class="page-title">Incomplete Inspections</div>
+        <button class="filter-chip" onclick="loadIncomplete()" style="margin-left:auto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline;vertical-align:-2px;margin-right:4px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+      <div class="incomplete-scroll" id="incompleteList">
+        <div style="padding:24px;color:var(--dim);font-weight:600">Loading…</div>
       </div>
     </div>
+
+    <!-- ADMIN TAB -->
+    <div class="tab" id="tabAdmin">
+      <div class="admin-layout">
+
+        <!-- Left nav -->
+        <div class="admin-nav">
+          <div class="admin-nav-title">Manage</div>
+          <button class="adm-btn active" id="admBtnDrivers" onclick="setAdminTab('drivers')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            Drivers
+          </button>
+          <button class="adm-btn" id="admBtnDispatchers" onclick="setAdminTab('dispatchers')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7 21v-1a5 5 0 0 1 10 0v1"/></svg>
+            Dispatchers
+          </button>
+          <div class="adm-sep"></div>
+          <button class="adm-btn" id="admBtnSteps" onclick="setAdminTab('steps')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>
+            Steps
+          </button>
+          <button class="adm-btn" id="admBtnAssets" onclick="setAdminTab('assets')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            Trailers
+          </button>
+        </div>
+
+        <!-- Content area -->
+        <div class="admin-content">
+
+          <!-- DRIVERS -->
+          <div class="admin-section active" id="asDrivers">
+            <div class="admin-section-title">Drivers</div>
+            <div class="admin-section-sub">Add and manage fleet drivers</div>
+            <div class="add-form">
+              <div class="add-form-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Add New Driver
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="drName" placeholder="James Rodriguez"></div>
+                <div class="fg"><label class="flbl">Username *</label><input class="finput" id="drUser" placeholder="jrodriguez" autocapitalize="none"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="drEmail" placeholder="james@company.com"></div>
+                <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="drPass" placeholder="min 6 characters"></div>
+              </div>
+              <button class="btn-add" onclick="createDriver()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Driver
+              </button>
+              <div class="alert-box" id="drAlert"></div>
+            </div>
+            <div class="list-section-hd">All Drivers</div>
+            <div id="driversTable"><div style="color:var(--dim);font-weight:600">Loading…</div></div>
+          </div>
+
+          <!-- DISPATCHERS -->
+          <div class="admin-section" id="asDispatchers">
+            <div class="admin-section-title">Dispatchers</div>
+            <div class="admin-section-sub">Add and manage dispatchers</div>
+            <div class="add-form">
+              <div class="add-form-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Add Dispatcher
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Full Name *</label><input class="finput" id="diName" placeholder="Sarah Mitchell"></div>
+                <div class="fg"><label class="flbl">Username *</label><input class="finput" id="diUser" placeholder="smitchell" autocapitalize="none"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="diEmail" placeholder="sarah@company.com"></div>
+                <div class="fg"><label class="flbl">Password *</label><input class="finput" type="password" id="diPass" placeholder="min 6 characters"></div>
+              </div>
+              <button class="btn-add" onclick="createDispatcher()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Dispatcher
+              </button>
+              <div class="alert-box" id="diAlert"></div>
+            </div>
+            <div class="list-section-hd">All Dispatchers</div>
+            <div id="dispatchersTable"><div style="color:var(--dim);font-weight:600">Loading…</div></div>
+          </div>
+
+          <!-- STEPS — 3 column split -->
+          <div class="admin-section" id="asSteps">
+            <div class="admin-section-title">Inspection Steps</div>
+            <div class="admin-section-sub">Click a type to view and manage its steps. Add new steps below.</div>
+
+            <!-- Steps split view -->
+            <div class="steps-layout" style="margin-bottom:24px">
+              <div class="steps-type-col">
+                <button class="steps-type-btn active" id="stepTypeBtnPickup" onclick="viewStepType('pickup')">
+                  PickUp <span class="step-count" id="stepCountPickup"></span>
+                </button>
+                <button class="steps-type-btn" id="stepTypeBtnDrop" onclick="viewStepType('drop')">
+                  Drop <span class="step-count" id="stepCountDrop"></span>
+                </button>
+                <button class="steps-type-btn" id="stepTypeBtnGeneral" onclick="viewStepType('general')">
+                  General <span class="step-count" id="stepCountGeneral"></span>
+                </button>
+              </div>
+              <div class="steps-list-col" id="stepsListCol">
+                <div style="padding:20px;color:var(--dim);font-weight:600">Loading…</div>
+              </div>
+            </div>
+
+            <!-- Add step form -->
+            <div class="add-form">
+              <div class="add-form-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Add New Step
+              </div>
+              <div class="form-row">
+                <div class="fg">
+                  <label class="flbl">Inspection Type</label>
+                  <select class="finput" id="newStepType">
+                    <option value="pickup">PickUp</option>
+                    <option value="drop">Drop</option>
+                    <option value="general">General</option>
+                  </select>
+                </div>
+                <div class="fg"><label class="flbl">Step Label *</label><input class="finput" id="newStepLabel" placeholder="e.g. Engine Compartment"></div>
+              </div>
+              <div class="fg" style="margin-bottom:14px">
+                <label class="flbl">Instruction *</label>
+                <textarea class="finput" id="newStepInstruction" placeholder="Describe what the driver should photograph…"></textarea>
+              </div>
+              <button class="btn-add" onclick="addStep()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Step
+              </button>
+              <div class="alert-box" id="stepAlert"></div>
+            </div>
+          </div>
+
+          <!-- ASSETS / TRAILERS -->
+          <div class="admin-section" id="asAssets">
+            <div class="admin-section-title">Trailers & Assets</div>
+            <div class="admin-section-sub">Manage your trailer and asset registry</div>
+            <div class="add-form">
+              <div class="add-form-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Add New Trailer
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Asset Number *</label><input class="finput" id="assetNum" placeholder="W98754"></div>
+                <div class="fg"><label class="flbl">Year</label><input class="finput" id="assetYear" placeholder="2022"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Make</label><input class="finput" id="assetMake" placeholder="Utility Trailer"></div>
+                <div class="fg"><label class="flbl">Model</label><input class="finput" id="assetModel" placeholder="DuraPlate"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">VIN</label><input class="finput" id="assetVin" placeholder="3UTVS2534N8536419"></div>
+                <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="assetPlate" placeholder="IL 9R5227"></div>
+              </div>
+              <button class="btn-add" onclick="createAsset()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Trailer
+              </button>
+              <div class="alert-box" id="assetAlert"></div>
+            </div>
+            <div class="list-section-hd">All Trailers</div>
+            <div id="assetsTable"><div style="color:var(--dim);font-weight:600">Loading…</div></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
-<!-- EDIT USER MODAL -->
+<!-- EDIT MODAL -->
 <div class="modal-bg" id="editModal">
   <div class="modal">
     <div class="modal-hd">
       <div class="modal-title" id="editModalTitle">Edit User</div>
-      <button class="modal-close" onclick="closeEditModal()">
-        <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
-      </button>
+      <button class="modal-close" onclick="closeEditModal()">✕ Close</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="editUserId">
@@ -272,8 +827,8 @@
         <div class="fg"><label class="flbl">Username</label><input class="finput" id="editUsername" placeholder="username" autocapitalize="none"></div>
       </div>
       <div class="form-row">
-        <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="editEmail" placeholder="email@company.com"></div>
-        <div class="fg"><label class="flbl">New Password</label><input class="finput" type="password" id="editPass" placeholder="Leave blank to keep current"></div>
+        <div class="fg"><label class="flbl">Email</label><input class="finput" type="email" id="editEmail"></div>
+        <div class="fg"><label class="flbl">New Password</label><input class="finput" type="password" id="editPass" placeholder="Leave blank to keep"></div>
       </div>
       <div id="editTruckFields">
         <div class="form-row">
@@ -281,47 +836,49 @@
           <div class="fg"><label class="flbl">Truck Number</label><input class="finput" id="editTruckNum" placeholder="TRK-001"></div>
         </div>
       </div>
-      <button class="btn-form" onclick="saveEditUser()">
-        <span><span class="material-icons-round" style="font-size:16px;vertical-align:-3px">save</span> Save Changes</span>
-        <span class="material-icons-round" style="font-size:16px">arrow_forward</span>
+      <button class="btn-add" onclick="saveEditUser()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save Changes
       </button>
       <div class="alert-box" id="editAlert"></div>
     </div>
   </div>
 </div>
 
-<!-- LIGHTBOX with flag button -->
+<!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox" onclick="closeLb()">
-  <button class="lb-close" onclick="closeLb()">
-    <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">close</span> Close
-  </button>
-  <img class="lb-img" id="lbImg" src="" alt="">
+  <button class="lb-close" onclick="event.stopPropagation();closeLb()">✕ Close</button>
+  <img class="lb-img" id="lbImg" src="" alt="" onclick="event.stopPropagation()">
   <div class="lb-meta" id="lbMeta"></div>
   <div class="lb-controls" onclick="event.stopPropagation()">
     <div class="lb-nav">
-      <button onclick="lbNav(-1)"><span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_left</span> Prev</button>
-      <button onclick="lbNav(1)">Next <span class="material-icons-round" style="font-size:18px;vertical-align:-4px">chevron_right</span></button>
+      <button onclick="lbNav(-1)">← Prev</button>
+      <button onclick="lbNav(1)">Next →</button>
     </div>
-    <button class="lb-flag-btn" id="lbFlagBtn" onclick="toggleFlag()">
-      <span class="material-icons-round" style="font-size:16px;vertical-align:-3px">flag</span> Flag Photo
-    </button>
+    <button class="lb-flag-btn" id="lbFlagBtn" onclick="toggleFlag()">🚩 Flag Photo</button>
   </div>
 </div>
 
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mobile-nav" id="mobileNav" style="display:none">
   <button class="mobile-nav-btn active" id="mNavOverview" onclick="showTab('Overview')">
-    <span class="material-icons-round">dashboard</span>Fleet
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Fleet
   </button>
   <button class="mobile-nav-btn" id="mNavFeed" onclick="showTab('Feed')">
-    <span class="material-icons-round">history</span>History
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+    History
+  </button>
+  <button class="mobile-nav-btn" id="mNavIncomplete" onclick="showTab('Incomplete')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    Incomplete
   </button>
   <button class="mobile-nav-btn" id="mNavAdmin" onclick="showTab('Admin')" style="display:none">
-    <span class="material-icons-round">manage_accounts</span>Admin
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+    Admin
   </button>
 </nav>
 
 <script src="/js/agent.js"></script>
-<script src="/js/icons.js"></script>
 </body>
 </html>
