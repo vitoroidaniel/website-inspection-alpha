@@ -233,8 +233,27 @@ document.addEventListener('keydown', e => {
 
 // ── Asset Panel ────────────────────────────────────────────────────────────
 async function openAssetPanel(id) {
+  // ensure history tab side panel works from any tab by using modal
   const panel = document.getElementById('assetPanel');
-  panel.classList.add('open');
+  // If we're not on the feed tab, show as floating modal
+  const onFeed = document.getElementById('tabFeed').classList.contains('active');
+  if (!onFeed) {
+    panel.classList.add('open');
+    panel.style.position = 'fixed';
+    panel.style.right = '0';
+    panel.style.top = '60px';
+    panel.style.bottom = '0';
+    panel.style.zIndex = '400';
+    panel.style.boxShadow = '-4px 0 32px rgba(0,0,0,0.15)';
+  } else {
+    panel.classList.add('open');
+    panel.style.position = '';
+    panel.style.right = '';
+    panel.style.top = '';
+    panel.style.bottom = '';
+    panel.style.zIndex = '';
+    panel.style.boxShadow = '';
+  }
   document.getElementById('apTitle').textContent = 'Loading…';
   document.getElementById('apSub').textContent = '';
   document.getElementById('apBody').innerHTML = '<div style="padding:20px;color:var(--dim);font-weight:600">Loading…</div>';
@@ -279,7 +298,16 @@ async function openAssetPanel(id) {
           }).join('')}</div>`}`;
   } catch (e) { document.getElementById('apBody').innerHTML = '<div style="padding:20px;color:var(--red);font-weight:700">Error loading.</div>'; }
 }
-function closeAssetPanel() { document.getElementById('assetPanel').classList.remove('open'); }
+function closeAssetPanel() {
+  const panel = document.getElementById('assetPanel');
+  panel.classList.remove('open');
+  panel.style.position = '';
+  panel.style.right = '';
+  panel.style.top = '';
+  panel.style.bottom = '';
+  panel.style.zIndex = '';
+  panel.style.boxShadow = '';
+}
 
 function fmtDateShort(dt) {
   if (!dt) return '—';
@@ -313,14 +341,14 @@ function renderFeed() {
       <td><span style="font-family:monospace;font-size:12px;color:var(--muted)">#${i.id.slice(0,8).toUpperCase()}</span></td>
       <td><span class="pill-ok">Submitted</span></td>
       <td style="color:var(--dim);font-size:14px">${fmtDate(i.submitted_at)}</td>
-      <td>${i.asset_number
-        ? `<span class="asset-link" onclick="event.stopPropagation();openAssetPanel(${i.asset_id||0})">${esc(i.asset_number)}</span>`
-        : i.truck_number ? esc(i.truck_number) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td onclick="event.stopPropagation()">${i.asset_number
+        ? `<span class="asset-link" onclick="openAssetPanel(${i.asset_id||0})" title="View trailer details">🔍 ${esc(i.asset_number)}</span>`
+        : i.truck_number ? `<span style="color:var(--dim)">${esc(i.truck_number)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-weight:800">${esc(i.driver_name)}</td>
       <td><span class="type-badge ${tk}">${TL[tk]||tk}</span></td>
       <td onclick="event.stopPropagation()">
         <div style="display:flex;gap:5px;flex-wrap:nowrap">
-          <button class="action-btn" onclick="openHistPanel('${i.id}')">View</button>
+          <button class="action-btn" onclick="openHistPanel('${i.id}')">🔍 View</button>
           <a class="action-btn" href="/api/agent/inspections/${i.id}/report" target="_blank" style="text-decoration:none">PDF</a>
           <a class="action-btn" href="/api/agent/inspections/${i.id}/download" download style="text-decoration:none">ZIP</a>
         </div>
@@ -442,8 +470,8 @@ function timeAgo(dt) {
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 function setAdminTab(t) {
-  const map = { drivers:'asDrivers', dispatchers:'asDispatchers', steps:'asSteps', assets:'asAssets' };
-  const btnMap = { drivers:'admBtnDrivers', dispatchers:'admBtnDispatchers', steps:'admBtnSteps', assets:'admBtnAssets' };
+  const map = { drivers:'asDrivers', dispatchers:'asDispatchers', steps:'asSteps', assets:'asAssets', trucks:'asTrucks' };
+  const btnMap = { drivers:'admBtnDrivers', dispatchers:'admBtnDispatchers', steps:'admBtnSteps', assets:'admBtnAssets', trucks:'admBtnTrucks' };
   Object.values(map).forEach(id => { const el=document.getElementById(id); if(el) el.classList.remove('active'); });
   Object.values(btnMap).forEach(id => { const el=document.getElementById(id); if(el) el.classList.remove('active'); });
   const sec = document.getElementById(map[t]); if(sec) sec.classList.add('active');
@@ -452,6 +480,7 @@ function setAdminTab(t) {
   if (t==='dispatchers') loadAdminDispatchers();
   if (t==='steps') loadSteps();
   if (t==='assets') loadAdminAssets();
+  if (t==='trucks') loadAdminTrucks();
 }
 
 async function createDriver() {
@@ -599,6 +628,7 @@ function renderStepType(type) {
         <div class="step-inst">${esc(s.instruction)}</div>
       </div>
       <div class="step-actions">
+        <button class="step-tog" onclick="openEditStepModal(${s.id},'${esc(s.label).replace(/'/g,"\\'")}','${esc(s.instruction).replace(/'/g,"\\'")}','${s.inspection_type}')">Edit</button>
         <button class="step-tog${s.active?'':' off'}" onclick="toggleStep(${s.id},${s.active})">${s.active?'Disable':'Enable'}</button>
         <button class="step-del" onclick="deleteStep(${s.id},'${esc(s.label)}')" title="Delete">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -637,23 +667,29 @@ async function deleteStep(id, label) {
 // ── Assets ─────────────────────────────────────────────────────────────────
 async function loadAdminAssets() {
   try {
-    const assets = await (await fetch('/api/assets')).json();
+    const assets = await (await fetch('/api/admin/assets')).json();
     const el = document.getElementById('assetsTable');
     if (!assets.length) { el.innerHTML = '<div style="color:var(--dim);font-weight:600;padding:12px 0">No assets yet.</div>'; return; }
     el.innerHTML = `<div class="utbl-wrap"><table class="utbl">
-      <thead><tr><th>Asset #</th><th>Year</th><th>Make / Model</th><th>VIN</th><th>Plate</th><th>Actions</th></tr></thead>
-      <tbody>${assets.map(a=>`<tr>
+      <thead><tr><th>Asset #</th><th>Year</th><th>Make / Model</th><th>Plate</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${assets.map(a=>`<tr style="${!a.active?'opacity:0.55':''}">
         <td style="font-weight:800;color:var(--brand)">${esc(a.asset_number)}</td>
         <td style="color:var(--dim)">${esc(a.year||'—')}</td>
         <td>${esc([a.make,a.model].filter(Boolean).join(' ')||'—')}</td>
-        <td style="font-size:12px;color:var(--muted);font-family:monospace">${esc(a.vin||'—')}</td>
         <td>${esc(a.license_plate||'—')}</td>
+        <td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${a.active?'var(--green-light)':'var(--red-light)'};color:${a.active?'var(--green)':'var(--red)'}">${a.active?'Active':'Disabled'}</span></td>
         <td><div class="utbl-actions">
-          <button class="tbl-btn edit" onclick="openAssetPanel(${a.id})">View</button>
-          <button class="tbl-btn del" onclick="deleteAsset(${a.id},'${esc(a.asset_number)}')">Remove</button>
+          <button class="tbl-btn edit" onclick="openEditAssetModal(${a.id},'${esc(a.asset_number)}','${esc(a.year||'')}','${esc(a.make||'')}','${esc(a.model||'')}','${esc(a.vin||'')}','${esc(a.license_plate||'')}','${esc(a.notes||'')}',${a.active?1:0})">Edit</button>
+          <button class="tbl-btn ${a.active?'disable':'enable'}" onclick="toggleAssetInline(${a.id},${a.active?1:0})">${a.active?'Disable':'Enable'}</button>
+          <button class="tbl-btn del" onclick="deleteAsset(${a.id},'${esc(a.asset_number)}')">Delete</button>
         </div></td>
       </tr>`).join('')}</tbody></table></div>`;
   } catch (e) {}
+}
+
+async function toggleAssetInline(id, active) {
+  await fetch(`/api/admin/assets/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  loadAdminAssets();
 }
 
 async function createAsset() {
@@ -668,9 +704,167 @@ async function createAsset() {
   loadAdminAssets();
 }
 async function deleteAsset(id, num) {
-  if (!confirm(`Remove asset "${num}"?`)) return;
+  if (!confirm(`Delete asset "${num}"? This cannot be undone.`)) return;
   await fetch(`/api/admin/assets/${id}`,{method:'DELETE'});
   loadAdminAssets();
+}
+
+// Edit asset modal
+function openEditAssetModal(id, asset_number, year, make, model, vin, license_plate, notes, active) {
+  document.getElementById('editAssetId').value = id;
+  document.getElementById('editAssetNum').value = asset_number||'';
+  document.getElementById('editAssetYear').value = year||'';
+  document.getElementById('editAssetMake').value = make||'';
+  document.getElementById('editAssetModel').value = model||'';
+  document.getElementById('editAssetVin').value = vin||'';
+  document.getElementById('editAssetPlate').value = license_plate||'';
+  document.getElementById('editAssetNotes').value = notes||'';
+  document.getElementById('editAssetToggleBtn').textContent = active ? 'Disable' : 'Enable';
+  document.getElementById('editAssetToggleBtn').dataset.active = active;
+  document.getElementById('editAssetAlert').style.display = 'none';
+  document.getElementById('editAssetModal').classList.add('open');
+}
+function closeEditAssetModal() { document.getElementById('editAssetModal').classList.remove('open'); }
+async function saveEditAsset() {
+  const id = document.getElementById('editAssetId').value;
+  const body = { asset_number:v('editAssetNum'), year:v('editAssetYear'), make:v('editAssetMake'), model:v('editAssetModel'), vin:v('editAssetVin'), license_plate:v('editAssetPlate'), notes:v('editAssetNotes') };
+  const al = document.getElementById('editAssetAlert');
+  if (!body.asset_number) { showAlert(al,'error','Asset number required.'); return; }
+  const r = await fetch(`/api/admin/assets/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok','Saved!');
+  setTimeout(()=>{ closeEditAssetModal(); loadAdminAssets(); }, 900);
+}
+async function toggleAssetFromModal() {
+  const id = document.getElementById('editAssetId').value;
+  const active = parseInt(document.getElementById('editAssetToggleBtn').dataset.active);
+  const al = document.getElementById('editAssetAlert');
+  const r = await fetch(`/api/admin/assets/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  if (!r.ok) { showAlert(al,'error','Error'); return; }
+  const newActive = !active;
+  document.getElementById('editAssetToggleBtn').textContent = newActive ? 'Disable' : 'Enable';
+  document.getElementById('editAssetToggleBtn').dataset.active = newActive ? 1 : 0;
+  showAlert(al,'ok', newActive ? 'Trailer enabled.' : 'Trailer disabled.');
+  loadAdminAssets();
+}
+
+
+// ── Edit Step ─────────────────────────────────────────────────────────────
+function openEditStepModal(id, label, instruction, type) {
+  document.getElementById('editStepId').value = id;
+  document.getElementById('editStepLabel').value = label;
+  document.getElementById('editStepInstruction').value = instruction;
+  document.getElementById('editStepTypeDisplay').textContent = {pickup:'PickUp',drop:'Drop',general:'General'}[type]||type;
+  document.getElementById('editStepAlert').style.display = 'none';
+  document.getElementById('editStepModal').classList.add('open');
+}
+function closeEditStepModal() { document.getElementById('editStepModal').classList.remove('open'); }
+async function saveEditStep() {
+  const id = document.getElementById('editStepId').value;
+  const label = v('editStepLabel'), instruction = v('editStepInstruction');
+  const al = document.getElementById('editStepAlert');
+  if (!label || !instruction) { showAlert(al,'error','Label and instruction required.'); return; }
+  const r = await fetch(`/api/admin/steps/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,instruction})});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok','Step updated!');
+  setTimeout(()=>{ closeEditStepModal(); loadSteps(); }, 900);
+}
+
+// ── Trucks ─────────────────────────────────────────────────────────────────
+async function loadAdminTrucks() {
+  try {
+    const [trucks, drivers] = await Promise.all([
+      (await fetch('/api/admin/trucks')).json(),
+      (await fetch('/api/admin/users?role=driver')).json()
+    ]);
+    const el = document.getElementById('trucksTable');
+    if (!trucks.length) { el.innerHTML = '<div style="color:var(--dim);font-weight:600;padding:12px 0">No trucks yet.</div>'; return; }
+    el.innerHTML = `<div class="utbl-wrap"><table class="utbl">
+      <thead><tr><th>Truck #</th><th>Model</th><th>Year / Make</th><th>Driver</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${trucks.map(t=>`<tr style="${!t.active?'opacity:0.55':''}">
+        <td style="font-weight:800;color:var(--brand)">${esc(t.truck_number)}</td>
+        <td>${esc(t.truck_model||'—')}</td>
+        <td style="color:var(--dim)">${esc([t.year,t.make].filter(Boolean).join(' ')||'—')}</td>
+        <td>${t.driver_name?`<span style="font-weight:700">${esc(t.driver_name)}</span>`:'<span style="color:var(--muted)">Unassigned</span>'}</td>
+        <td><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${t.active?'var(--green-light)':'var(--red-light)'};color:${t.active?'var(--green)':'var(--red)'}">${t.active?'Active':'Disabled'}</span></td>
+        <td><div class="utbl-actions">
+          <button class="tbl-btn edit" onclick="openEditTruckModal(${t.id},'${esc(t.truck_number)}','${esc(t.truck_model||'')}','${esc(t.year||'')}','${esc(t.make||'')}','${esc(t.vin||'')}','${esc(t.license_plate||'')}','${esc(t.notes||'')}',${t.driver_id||'null'},${t.active?1:0})">Edit</button>
+          <button class="tbl-btn ${t.active?'disable':'enable'}" onclick="toggleTruckInline(${t.id},${t.active?1:0})">${t.active?'Disable':'Enable'}</button>
+          <button class="tbl-btn del" onclick="deleteTruck(${t.id},'${esc(t.truck_number)}')">Delete</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch(e) {}
+}
+
+async function toggleTruckInline(id, active) {
+  await fetch(`/api/admin/trucks/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  loadAdminTrucks();
+}
+
+async function createTruck() {
+  const body = { truck_number:v('truckNum'), truck_model:v('truckModel'), year:v('truckYear'), make:v('truckMake'), vin:v('truckVin'), license_plate:v('truckPlate') };
+  const al = document.getElementById('truckAlert');
+  if (!body.truck_number) { showAlert(al,'error','Truck number is required.'); return; }
+  const r = await fetch('/api/admin/trucks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok',`Truck "${body.truck_number}" added!`);
+  ['truckNum','truckModel','truckYear','truckMake','truckVin','truckPlate'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  loadAdminTrucks();
+}
+
+async function deleteTruck(id, num) {
+  if (!confirm(`Delete truck "${num}"? This cannot be undone.`)) return;
+  await fetch(`/api/admin/trucks/${id}`,{method:'DELETE'});
+  loadAdminTrucks();
+}
+
+function openEditTruckModal(id, truck_number, truck_model, year, make, vin, license_plate, notes, driver_id, active) {
+  document.getElementById('editTruckId').value = id;
+  document.getElementById('editTruckNum').value = truck_number||'';
+  document.getElementById('editTruckModel').value = truck_model||'';
+  document.getElementById('editTruckYear').value = year||'';
+  document.getElementById('editTruckMake').value = make||'';
+  document.getElementById('editTruckVin').value = vin||'';
+  document.getElementById('editTruckPlate').value = license_plate||'';
+  document.getElementById('editTruckNotes').value = notes||'';
+  document.getElementById('editTruckDriver').value = driver_id||'';
+  document.getElementById('editTruckToggleBtn').textContent = active ? 'Disable' : 'Enable';
+  document.getElementById('editTruckToggleBtn').dataset.active = active;
+  document.getElementById('editTruckAlert').style.display = 'none';
+  // Populate driver select
+  fetch('/api/admin/users?role=driver').then(r=>r.json()).then(drivers => {
+    const sel = document.getElementById('editTruckDriver');
+    sel.innerHTML = '<option value="">— Unassigned —</option>' +
+      drivers.map(d=>`<option value="${d.id}" ${d.id==driver_id?'selected':''}>${esc(d.full_name)}</option>`).join('');
+  });
+  document.getElementById('editTruckModal').classList.add('open');
+}
+function closeEditTruckModal() { document.getElementById('editTruckModal').classList.remove('open'); }
+async function saveEditTruck() {
+  const id = document.getElementById('editTruckId').value;
+  const body = { truck_number:v('editTruckNum'), truck_model:v('editTruckModel'), year:v('editTruckYear'), make:v('editTruckMake'), vin:v('editTruckVin'), license_plate:v('editTruckPlate'), notes:v('editTruckNotes'), driver_id: document.getElementById('editTruckDriver').value||null };
+  const al = document.getElementById('editTruckAlert');
+  if (!body.truck_number) { showAlert(al,'error','Truck number required.'); return; }
+  const r = await fetch(`/api/admin/trucks/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) { showAlert(al,'error',d.error||'Error'); return; }
+  showAlert(al,'ok','Saved!');
+  setTimeout(()=>{ closeEditTruckModal(); loadAdminTrucks(); loadDrivers(); }, 900);
+}
+async function toggleTruckFromModal() {
+  const id = document.getElementById('editTruckId').value;
+  const active = parseInt(document.getElementById('editTruckToggleBtn').dataset.active);
+  const al = document.getElementById('editTruckAlert');
+  const r = await fetch(`/api/admin/trucks/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!active})});
+  if (!r.ok) { showAlert(al,'error','Error'); return; }
+  const newActive = !active;
+  document.getElementById('editTruckToggleBtn').textContent = newActive ? 'Disable' : 'Enable';
+  document.getElementById('editTruckToggleBtn').dataset.active = newActive ? 1 : 0;
+  showAlert(al,'ok', newActive ? 'Truck enabled.' : 'Truck disabled.');
+  loadAdminTrucks();
 }
 
 // ── Tab navigation ─────────────────────────────────────────────────────────
@@ -719,5 +913,14 @@ window.deleteUser = deleteUser; window.toggleStep = toggleStep;
 window.addStep = addStep; window.deleteStep = deleteStep;
 window.createAsset = createAsset; window.deleteAsset = deleteAsset;
 window.loadAdminAssets = loadAdminAssets; window.viewStepType = viewStepType;
+window.openEditAssetModal = openEditAssetModal; window.closeEditAssetModal = closeEditAssetModal;
+window.saveEditAsset = saveEditAsset; window.toggleAssetInline = toggleAssetInline;
+window.toggleAssetFromModal = toggleAssetFromModal;
+window.openEditStepModal = openEditStepModal; window.closeEditStepModal = closeEditStepModal;
+window.saveEditStep = saveEditStep;
+window.loadAdminTrucks = loadAdminTrucks; window.createTruck = createTruck; window.deleteTruck = deleteTruck;
+window.openEditTruckModal = openEditTruckModal; window.closeEditTruckModal = closeEditTruckModal;
+window.saveEditTruck = saveEditTruck; window.toggleTruckInline = toggleTruckInline;
+window.toggleTruckFromModal = toggleTruckFromModal;
 window.showTab = showTab; window.logout = logout; window.backToDrivers = backToDrivers;
 window.loadIncomplete = loadIncomplete;
