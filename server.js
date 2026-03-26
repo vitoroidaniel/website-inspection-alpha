@@ -1,13 +1,5 @@
 // server.js — Kurtex Fleet Inspection System
 // by Rekka Software
-//
-// Structure:
-//   middleware/auth.js   — session role guards
-//   routes/auth.js       — login, logout, /me, WebAuthn Face ID
-//   routes/driver.js     — inspection flow (start, photo, submit, history)
-//   routes/agent.js      — dispatcher views, PDF report, ZIP download, stats
-//   routes/admin.js      — user/step/asset CRUD
-//   database.js          — pg connection + helpers
 
 const express  = require('express');
 const session  = require('express-session');
@@ -34,7 +26,7 @@ const uploadsDir =
 
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-// ── Multer (photo upload) — shared with route files via app.locals ─────────────
+// ── Multer ────────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(uploadsDir, req.params.inspectionId || 'temp');
@@ -80,26 +72,21 @@ app.get('/', (req, res) => {
     : res.redirect('/agent/dashboard');
 });
 
-app.get('/login', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'login.html')));
-
-app.get('/driver/inspect', auth, (req, res) =>
-  req.session.user.role === 'driver'
-    ? res.sendFile(path.join(__dirname, 'public', 'driver.html'))
-    : res.redirect('/agent/dashboard'));
-
-app.get('/agent/dashboard', auth, (req, res) =>
-  req.session.user.role !== 'driver'
-    ? res.sendFile(path.join(__dirname, 'public', 'agent.html'))
-    : res.redirect('/driver/inspect'));
+app.get('/login',           (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/driver/inspect',  auth, (req, res) => req.session.user.role === 'driver' ? res.sendFile(path.join(__dirname, 'public', 'driver.html')) : res.redirect('/agent/dashboard'));
+app.get('/agent/dashboard', auth, (req, res) => req.session.user.role !== 'driver'  ? res.sendFile(path.join(__dirname, 'public', 'agent.html'))  : res.redirect('/driver/inspect'));
 
 // ── API routes ────────────────────────────────────────────────────────────────
-// auth routes: /api/login  /api/logout  /api/me  /api/auth/webauthn/*
-app.use('/api/auth', authRouter);   // webauthn/* → /api/auth/webauthn/*
-app.use('/api',      authRouter);   // login, logout, me → /api/login etc.
-app.use('/',     driverRouter);  // inspection-steps, inspections/*, driver/*
-app.use('/',     agentRouter);   // assets/*, agent/*
-app.use('/',     adminRouter);   // admin/*
+// login/logout/me  →  POST /api/login, POST /api/logout, GET /api/me
+app.use('/api', authRouter);
+
+// webauthn          →  /api/auth/webauthn/*  (frontend expects this prefix)
+app.use('/api/auth', authRouter);
+
+// all other routes
+app.use('/', driverRouter);
+app.use('/', agentRouter);
+app.use('/', adminRouter);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () =>
