@@ -73,6 +73,7 @@ function renderDrivers(list) {
       <div class="dr-cnt">${d.submitted_count||0}</div>
     </div>`;
   }).join('');
+  if (window.applyIcons) applyIcons();
 }
 
 function filterDrivers() {
@@ -126,6 +127,7 @@ async function selectDriver(id) {
         </div>
       </div>`;
     }).join('');
+  if (window.applyIcons) applyIcons();
   } catch (e) { list.innerHTML = '<div style="font-size:15px;color:var(--red);font-weight:700">Error loading.</div>'; }
 }
 
@@ -327,6 +329,7 @@ async function openAssetPanel(id) {
             </div>`;
           }).join('')
       }`;
+  if (window.applyIcons) applyIcons();
   } catch (e) {
     document.getElementById('apBody').innerHTML = '<div style="padding:20px;font-size:15px;color:var(--red);font-weight:700">Error loading asset.</div>';
   }
@@ -391,6 +394,7 @@ function renderFeed() {
       </td>
     </tr>`;
   }).join('');
+  if (window.applyIcons) applyIcons();
 }
 
 async function openHistPanel(id) {
@@ -440,6 +444,7 @@ async function openHistPanel(id) {
           <span class="material-icons-round" style="font-size:16px">download</span> Download ZIP
         </a>
       </div>`;
+  if (window.applyIcons) applyIcons();
   } catch (e) { document.getElementById('hpBody').innerHTML = '<div style="font-size:15px;color:var(--red);font-weight:700">Error loading.</div>'; }
 }
 
