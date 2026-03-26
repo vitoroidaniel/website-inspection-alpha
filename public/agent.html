@@ -664,6 +664,10 @@ textarea.finput { resize: vertical; min-height: 80px; }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
             Trailers
           </button>
+          <button class="adm-btn" id="admBtnTrucks" onclick="setAdminTab('trucks')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            Trucks
+          </button>
         </div>
 
         <!-- Content area -->
@@ -806,6 +810,37 @@ textarea.finput { resize: vertical; min-height: 80px; }
             <div id="assetsTable"><div style="color:var(--dim);font-weight:600">Loading…</div></div>
           </div>
 
+          <!-- TRUCKS -->
+          <div class="admin-section" id="asTrucks">
+            <div class="admin-section-title">Trucks</div>
+            <div class="admin-section-sub">Add and manage fleet trucks</div>
+            <div class="add-form">
+              <div class="add-form-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                Add New Truck
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Truck Number *</label><input class="finput" id="truckNum" placeholder="TRK-004"></div>
+                <div class="fg"><label class="flbl">Model</label><input class="finput" id="truckModel" placeholder="Freightliner Cascadia"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">Year</label><input class="finput" id="truckYear" placeholder="2023"></div>
+                <div class="fg"><label class="flbl">Make</label><input class="finput" id="truckMake" placeholder="Freightliner"></div>
+              </div>
+              <div class="form-row">
+                <div class="fg"><label class="flbl">VIN</label><input class="finput" id="truckVin" placeholder="VIN number"></div>
+                <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="truckPlate" placeholder="IL 1234AB"></div>
+              </div>
+              <button class="btn-add" onclick="createTruck()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Truck
+              </button>
+              <div class="alert-box" id="truckAlert"></div>
+            </div>
+            <div class="list-section-hd">All Trucks</div>
+            <div id="trucksTable"><div style="color:var(--dim);font-weight:600">Loading…</div></div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -841,6 +876,98 @@ textarea.finput { resize: vertical; min-height: 80px; }
         Save Changes
       </button>
       <div class="alert-box" id="editAlert"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT STEP MODAL -->
+<div class="modal-bg" id="editStepModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Edit Step — <span id="editStepTypeDisplay" style="color:var(--brand)"></span></div>
+      <button class="modal-close" onclick="closeEditStepModal()">✕ Close</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editStepId">
+      <div class="fg" style="margin-bottom:12px"><label class="flbl">Step Label *</label><input class="finput" id="editStepLabel"></div>
+      <div class="fg" style="margin-bottom:14px"><label class="flbl">Instruction *</label><textarea class="finput" id="editStepInstruction" style="min-height:100px"></textarea></div>
+      <button class="btn-add" onclick="saveEditStep()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save Step
+      </button>
+      <div class="alert-box" id="editStepAlert"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT ASSET MODAL -->
+<div class="modal-bg" id="editAssetModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Edit Trailer</div>
+      <button class="modal-close" onclick="closeEditAssetModal()">✕ Close</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editAssetId">
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Asset Number *</label><input class="finput" id="editAssetNum"></div>
+        <div class="fg"><label class="flbl">Year</label><input class="finput" id="editAssetYear"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Make</label><input class="finput" id="editAssetMake"></div>
+        <div class="fg"><label class="flbl">Model</label><input class="finput" id="editAssetModel"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label class="flbl">VIN</label><input class="finput" id="editAssetVin"></div>
+        <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="editAssetPlate"></div>
+      </div>
+      <div class="fg" style="margin-bottom:14px"><label class="flbl">Notes</label><input class="finput" id="editAssetNotes"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-add" onclick="saveEditAsset()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save
+        </button>
+        <button class="btn-add" id="editAssetToggleBtn" onclick="toggleAssetFromModal()" style="background:var(--amber);box-shadow:none">Disable</button>
+      </div>
+      <div class="alert-box" id="editAssetAlert"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT TRUCK MODAL -->
+<div class="modal-bg" id="editTruckModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Edit Truck</div>
+      <button class="modal-close" onclick="closeEditTruckModal()">✕ Close</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editTruckId">
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Truck Number *</label><input class="finput" id="editTruckNum"></div>
+        <div class="fg"><label class="flbl">Model</label><input class="finput" id="editTruckModel"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label class="flbl">Year</label><input class="finput" id="editTruckYear"></div>
+        <div class="fg"><label class="flbl">Make</label><input class="finput" id="editTruckMake"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label class="flbl">VIN</label><input class="finput" id="editTruckVin"></div>
+        <div class="fg"><label class="flbl">License Plate</label><input class="finput" id="editTruckPlate"></div>
+      </div>
+      <div class="fg" style="margin-bottom:12px"><label class="flbl">Notes</label><input class="finput" id="editTruckNotes"></div>
+      <div class="fg" style="margin-bottom:14px">
+        <label class="flbl">Assigned Driver</label>
+        <select class="finput" id="editTruckDriver"><option value="">— Unassigned —</option></select>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-add" onclick="saveEditTruck()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save
+        </button>
+        <button class="btn-add" id="editTruckToggleBtn" onclick="toggleTruckFromModal()" style="background:var(--amber);box-shadow:none">Disable</button>
+      </div>
+      <div class="alert-box" id="editTruckAlert"></div>
     </div>
   </div>
 </div>
